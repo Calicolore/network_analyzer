@@ -120,8 +120,9 @@ initSniffer(myIp, async (packet) => {
     // PASSO 6: EMISSIONE WEBSOCKET AL FRONTEND
     // ================================================================================
 
-    // Invia il pacchetto elaborato alla dashboard client in tempo reale
-    // Invia il pacchetto elaborato alla dashboard client in tempo reale
+    // Estrazione della dimensione del pacchetto (supporta vari formati di pcap/raw-socket)
+    const packetSizeBytes = packet.size || packet.length || packet.len || (packet.pcap_header ? packet.pcap_header.len : 0) || 0;
+
     io.emit('new_packet', {
         sessionId,
         remoteIp,
@@ -130,6 +131,8 @@ initSniffer(myIp, async (packet) => {
         technicalSubtitle,
         provider: provider,
         totalKB,
+        size: packetSizeBytes, 
+        isOutbound: isOutbound, 
         remotePort,
         sessionColor,
         service: serviceName,

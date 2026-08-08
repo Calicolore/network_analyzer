@@ -16,6 +16,8 @@ document.addEventListener('DOMContentLoaded', () => {
             applyFiltersToDashboardUI();
         });
     }
+    // Nota: Il calcolo del grafico della banda è delegato interamente a bandwidthChart.js
+    // per evitare conflitti e duplicazioni.
 });
 
 // ------------------------------------------------------------------
@@ -24,25 +26,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // 1. Posizione iniziale PC
 socket.on('home_location', (data) => {
-    setHomeLocation(data.coords);
+    if (typeof setHomeLocation === 'function') {
+        setHomeLocation(data.coords);
+    }
 });
 
 // 2. Ricezione nuovi pacchetti
 socket.on('new_packet', (data) => {
     if (!data || !data.sessionId) return;
 
-    // Mantiene aggiornati i dati dell'ultima attività per la sessione
+    // Mantiene aggiornati i dati della sessione
     sessionsMap.set(data.sessionId, data);
 
-    // Registra i valori unici (Nazione, Servizio) per aggiornare i menu a tendina
+    // Registra i valori unici nei filtri
     if (window.filterManager) {
         window.filterManager.updateAvailableFilters(data);
     }
 
-    // Renderizza SEMPRE la card (se non esiste la crea, se esiste la aggiorna)
-    renderPacketCard(data);
+    // Renderizza e aggiorna visibilità della card
+    if (typeof renderPacketCard === 'function') {
+        renderPacketCard(data);
+    }
 
-    // Aggiorna la visibilità della card in base ai filtri correnti
     const card = document.getElementById(data.sessionId);
     if (card) {
         const matchesFilter = !window.filterManager || window.filterManager.isPacketMatchingFilters(data);
@@ -51,26 +56,29 @@ socket.on('new_packet', (data) => {
     }
 
     // Aggiorna la mappa
-    updateMapPacket(data);
+    if (typeof updateMapPacket === 'function') {
+        updateMapPacket(data);
+    }
 });
 
 // 3. Ricezione hop del Traceroute
 socket.on('traceroute_hop', (data) => {
-    updateMapTraceroute(data);
+    if (typeof updateMapTraceroute === 'function') {
+        updateMapTraceroute(data);
+    }
 });
 
-// 4. Gestione chiusura sessione (Bordo Rosso)
+// 4. Gestione chiusura sessione
 socket.on('session_closed', (data) => {
-    markSessionClosed(data.sessionId);
+    if (typeof markSessionClosed === 'function') {
+        markSessionClosed(data.sessionId);
+    }
 });
 
 // ------------------------------------------------------------------
 // FUNZIONI AUSILIARIE PER I FILTRI
 // ------------------------------------------------------------------
 
-/**
- * Applica i filtri a tutte le card presenti nella dashboard
- */
 function applyFiltersToDashboardUI() {
     sessionsMap.forEach((packetData, sessionId) => {
         const card = document.getElementById(sessionId);
@@ -81,13 +89,12 @@ function applyFiltersToDashboardUI() {
     });
 }
 
-/**
- * Funzione globale per rimuovere completamente una sessione sia dalla Dashboard che dalla Mappa
- */
 window.removeSession = function(sessionId) {
     sessionsMap.delete(sessionId);
-    removeSessionCard(sessionId);
-    removeSessionFromMap(sessionId);
+    if (typeof removeSessionCard === 'function') removeSessionCard(sessionId);
+    if (typeof removeSessionFromMap === 'function') removeSessionFromMap(sessionId);
 };
 
-initSettingsUI();
+if (typeof initSettingsUI === 'function') {
+    initSettingsUI();
+}
