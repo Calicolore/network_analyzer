@@ -32,42 +32,36 @@
         </button>
     </div>
 
-    <!-- BARRA FILTRI E RICERCA IN TEMPO REALE -->
-    <div class="filter-bar">
-        <!-- Campo Ricerca Generica -->
-        <div class="filter-group filter-search">
-            <input type="text" id="search-input" placeholder="🔍 Cerca dominio (es. google), IP, nazione, provider..." autocomplete="off">
-            <button id="clear-search-btn" class="clear-btn" title="Cancella testo">&times;</button>
+    <!-- BARRA DI RICERCA E FILTRI DINAMICI (POSIZIONATA SOPRA LA DASHBOARD) -->
+    <div class="search-filter-bar">
+        <!-- Ricerca SOLO per nome dominio -->
+        <div class="search-box">
+            <input 
+                type="text" 
+                id="domainSearchInput" 
+                placeholder="🔍 Cerca dominio (es. youtube, google, x)..."
+                autocomplete="off"
+            />
         </div>
 
-        <!-- Filtro Servizio / Porta -->
-        <div class="filter-group">
-            <select id="service-filter">
-                <option value="ALL">Tutti i Servizi</option>
-                <option value="HTTPS">HTTPS (443)</option>
-                <option value="HTTP">HTTP (80)</option>
-                <option value="DNS">DNS (53)</option>
-                <option value="QUIC">QUIC / UDP</option>
-                <option value="OTHER">Altre Porte</option>
+        <!-- Menu a tendina popolati in tempo reale -->
+        <div class="filter-dropdowns">
+            <!-- Filtro Nazione -->
+            <select id="countrySelect">
+                <option value="">Tutte le Nazioni</option>
             </select>
-        </div>
 
-        <!-- Filtro Stato Connessione -->
-        <div class="filter-group">
-            <select id="status-filter">
-                <option value="ALL">Tutti gli Stati</option>
-                <option value="ACTIVE">Solo Attive</option>
-                <option value="CLOSED">Solo Chiuse</option>
+            <!-- Filtro Servizio / Porta -->
+            <select id="serviceSelect">
+                <option value="">Tutti i Servizi/Porte</option>
             </select>
-        </div>
 
-        <!-- Contatore e Reset -->
-        <div class="filter-info">
-            <span id="filter-counter">Sessioni: <strong>0 / 0</strong></span>
-            <button id="reset-filters-btn" class="reset-btn">Reset Filtri</button>
+            <!-- Bottone Reset -->
+            <button id="resetFiltersBtn" class="btn-reset">Reset Filtri</button>
         </div>
     </div>
 
+    <!-- CONTENITORE DASHBOARD -->
     <div id="dashboard"></div>
 
     <!-- OVERLAY SFONDO SCURO SIDEBAR -->

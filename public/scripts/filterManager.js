@@ -1,156 +1,225 @@
 /**
  * ====================================================================================
- * GESTORE FILTRI E RICERCA IN TEMPO REALE (filterManager.js)
+ * GESTORE FILTRI E RICERCA (filterManager.js)
  * ====================================================================================
  */
 
-const FilterManager = {
-    // Riferimenti agli elementi DOM
-    searchInput: null,
-    clearSearchBtn: null,
-    serviceFilter: null,
-    statusFilter: null,
-    resetBtn: null,
-    counterEl: null,
+// Set per accumulare i valori DISTINCT rilevati dal traffico di rete
+const detectedCountries = new Set();
+const detectedServices = new Set();
 
-    /**
-     * Inizializza i listener della barra filtri
-     */
-    init() {
-        this.searchInput = document.getElementById('search-input');
-        this.clearSearchBtn = document.getElementById('clear-search-btn');
-        this.serviceFilter = document.getElementById('service-filter');
-        this.statusFilter = document.getElementById('status-filter');
-        this.resetBtn = document.getElementById('reset-filters-btn');
-        this.counterEl = document.getElementById('filter-counter');
-
-        if (!this.searchInput) return;
-
-        // Listener per input e tendine
-        this.searchInput.addEventListener('input', () => {
-            this.toggleClearBtn();
-            this.applyFilters();
-        });
-
-        this.clearSearchBtn.addEventListener('click', () => {
-            this.searchInput.value = '';
-            this.toggleClearBtn();
-            this.applyFilters();
-        });
-
-        this.serviceFilter.addEventListener('change', () => this.applyFilters());
-        this.statusFilter.addEventListener('change', () => this.applyFilters());
-        this.resetBtn.addEventListener('click', () => this.resetAll());
-    },
-
-    toggleClearBtn() {
-        if (this.clearSearchBtn) {
-            this.clearSearchBtn.style.display = this.searchInput.value ? 'block' : 'none';
-        }
-    },
-
-    resetAll() {
-        if (this.searchInput) this.searchInput.value = '';
-        if (this.serviceFilter) this.serviceFilter.value = 'ALL';
-        if (this.statusFilter) this.statusFilter.value = 'ALL';
-        this.toggleClearBtn();
-        this.applyFilters();
-    },
-
-    /**
-     * Verifica se una singola card soddisfa i criteri attivi
-     */
-    checkCardMatch(card) {
-        const query = (this.searchInput?.value || '').trim().toLowerCase();
-        const selectedService = this.serviceFilter?.value || 'ALL';
-        const selectedStatus = this.statusFilter?.value || 'ALL';
-
-        // Data attributes memorizzati sulla card
-        const domain = card.dataset.domain || '';
-        const ip = card.dataset.ip || '';
-        const country = card.dataset.country || '';
-        const provider = card.dataset.provider || '';
-        const service = card.dataset.service || '';
-        const isClosed = card.dataset.closed === 'true';
-
-        // 1. Filtro Testuale (su dataset e testo visibile)
-        let matchesQuery = true;
-        if (query) {
-            const fullContent = `${domain} ${ip} ${country} ${provider} ${service} ${card.innerText}`.toLowerCase();
-            matchesQuery = fullContent.includes(query);
-        }
-
-        // 2. Filtro Servizio / Porta
-        let matchesService = true;
-        if (selectedService !== 'ALL') {
-            if (selectedService === 'OTHER') {
-                matchesService = !['HTTPS', 'HTTP', 'DNS', 'QUIC'].includes(service);
-            } else {
-                matchesService = service.includes(selectedService);
-            }
-        }
-
-        // 3. Filtro Stato Connessione
-        let matchesStatus = true;
-        if (selectedStatus === 'ACTIVE') {
-            matchesStatus = !isClosed;
-        } else if (selectedStatus === 'CLOSED') {
-            matchesStatus = isClosed;
-        }
-
-        return matchesQuery && matchesService && matchesStatus;
-    },
-
-    /**
-     * Applica i filtri su tutte le card correnti nella dashboard
-     */
-    applyFilters() {
-        const cards = document.querySelectorAll('#dashboard .session-card');
-        let visibleCount = 0;
-
-        cards.forEach(card => {
-            const isMatch = this.checkCardMatch(card);
-            if (isMatch) {
-                card.classList.remove('filter-hidden');
-                visibleCount++;
-            } else {
-                card.classList.add('filter-hidden');
-            }
-        });
-
-        this.updateCounter(visibleCount, cards.length);
-    },
-
-    /**
-     * Valuta una nuova card creata dinamica durante lo streaming
-     */
-    evaluateNewCard(cardElement) {
-        const isMatch = this.checkCardMatch(cardElement);
-        if (isMatch) {
-            cardElement.classList.remove('filter-hidden');
-        } else {
-            cardElement.classList.add('filter-hidden');
-        }
-        this.updateCounterOnly();
-    },
-
-    updateCounter(visible, total) {
-        if (this.counterEl) {
-            this.counterEl.innerHTML = `Sessioni: <strong>${visible} / ${total}</strong>`;
-        }
-    },
-
-    updateCounterOnly() {
-        const totalCards = document.querySelectorAll('#dashboard .session-card').length;
-        const visibleCards = document.querySelectorAll('#dashboard .session-card:not(.filter-hidden)').length;
-        this.updateCounter(visibleCards, totalCards);
-    }
+// Stato locale dei filtri attivi
+const activeFilters = {
+    domain: '',
+    country: '',
+    service: ''
 };
 
-// Inizializzazione al caricamento del DOM
-document.addEventListener('DOMContentLoaded', () => {
-    FilterManager.init();
-});
+// Riferimento alla funzione di callback per aggiornare l'interfaccia principale
+let onFilterChangeCallback = null;
 
-// Esporta l'oggetto a livello globale per utilizzarlo in dashboard.js / uiManager.js
-window.FilterManager = FilterManager;
+/**
+ * Estrae il nome dell'host/dominio provando tutte le proprietà possibili del pacchetto
+ */
+function extractPacketHost(packet) {
+    if (!packet) return '';
+    return (
+        packet.domain ||
+        packet.hostName ||
+        packet.hostname ||
+        packet.resourceName ||
+        packet.host ||
+        packet.dnsName ||
+        packet.sni ||
+        packet.dstHost ||
+        packet.ip ||
+        packet.dstIP ||
+        ''
+    ).toString().toLowerCase();
+}
+
+/**
+ * Estrae la Nazione provando le varianti di proprietà
+ */
+function extractPacketCountry(packet) {
+    if (!packet) return '';
+    return (packet.country || packet.countryName || packet.nation || '').toString().trim();
+}
+
+/**
+ * Estrae il Servizio / Porta provando le varianti di proprietà
+ */
+function extractPacketService(packet) {
+    if (!packet) return '';
+    if (packet.service) return packet.service.toString().trim();
+    if (packet.protocol) return packet.protocol.toString().trim();
+    const port = packet.port || packet.dstPort;
+    if (port) return `PORT-${port}`;
+    return '';
+}
+
+/**
+ * Inizializza i listener degli eventi sugli elementi del DOM
+ */
+function initFilterManager(renderCallback) {
+    onFilterChangeCallback = renderCallback;
+
+    const domainInput = document.getElementById('domainSearchInput');
+    const countrySelect = document.getElementById('countrySelect');
+    const serviceSelect = document.getElementById('serviceSelect');
+    const resetBtn = document.getElementById('resetFiltersBtn');
+
+    // Ricerca dominio in tempo reale durante la digitazione
+    domainInput?.addEventListener('input', (e) => {
+        activeFilters.domain = e.target.value.trim().toLowerCase();
+        triggerFilterUpdate();
+    });
+
+    // Selezione Nazione
+    countrySelect?.addEventListener('change', (e) => {
+        activeFilters.country = e.target.value;
+        triggerFilterUpdate();
+    });
+
+    // Selezione Servizio / Porta
+    serviceSelect?.addEventListener('change', (e) => {
+        activeFilters.service = e.target.value;
+        triggerFilterUpdate();
+    });
+
+    // Reset Filtri
+    resetBtn?.addEventListener('click', () => {
+        resetAllFilters();
+    });
+}
+
+/**
+ * Registra i dati di una nuova connessione/pacchetto
+ * e aggiorna i menu a tendina se compaiono valori DISTINCT non ancora registrati.
+ */
+function updateAvailableFilters(packet) {
+    if (!packet) return;
+
+    let hasNewValue = false;
+
+    // 1. Estrazione Nazione
+    const country = extractPacketCountry(packet);
+    if (country && country !== 'Locale' && country !== 'Sconosciuta' && !detectedCountries.has(country)) {
+        detectedCountries.add(country);
+        hasNewValue = true;
+    }
+
+    // 2. Estrazione Servizio/Porta
+    const service = extractPacketService(packet);
+    if (service && !detectedServices.has(service)) {
+        detectedServices.add(service);
+        hasNewValue = true;
+    }
+
+    // Se è stato rilevato un valore nuovo, aggiorna i menu a tendina nel DOM
+    if (hasNewValue) {
+        renderFilterDropdowns();
+    }
+}
+
+/**
+ * Popola in modo dinamico i select mantenendo la selezione corrente
+ */
+function renderFilterDropdowns() {
+    const countrySelect = document.getElementById('countrySelect');
+    const serviceSelect = document.getElementById('serviceSelect');
+
+    if (!countrySelect || !serviceSelect) return;
+
+    const currentCountry = countrySelect.value;
+    const currentService = serviceSelect.value;
+
+    // Aggiorna Select Nazioni
+    countrySelect.innerHTML = '<option value="">Tutte le Nazioni</option>';
+    Array.from(detectedCountries).sort().forEach(country => {
+        const option = document.createElement('option');
+        option.value = country;
+        option.textContent = country;
+        countrySelect.appendChild(option);
+    });
+    countrySelect.value = currentCountry;
+
+    // Aggiorna Select Servizi / Porte
+    serviceSelect.innerHTML = '<option value="">Tutti i Servizi/Porte</option>';
+    Array.from(detectedServices).sort().forEach(service => {
+        const option = document.createElement('option');
+        option.value = service;
+        option.textContent = service;
+        serviceSelect.appendChild(option);
+    });
+    serviceSelect.value = currentService;
+}
+
+/**
+ * Verifica se un pacchetto/connessione soddisfa tutti i filtri attivi
+ */
+function isPacketMatchingFilters(packet) {
+    if (!packet) return true;
+
+    // 1. Filtro Dominio (cerca nel nome host / dominio)
+    if (activeFilters.domain) {
+        const hostName = extractPacketHost(packet);
+        if (!hostName.includes(activeFilters.domain)) {
+            return false;
+        }
+    }
+
+    // 2. Filtro Nazione
+    if (activeFilters.country) {
+        const country = extractPacketCountry(packet);
+        if (country !== activeFilters.country) {
+            return false;
+        }
+    }
+
+    // 3. Filtro Servizio / Porta
+    if (activeFilters.service) {
+        const service = extractPacketService(packet);
+        if (service !== activeFilters.service) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/**
+ * Notifica la dashboard dell'avvenuto cambio di filtri
+ */
+function triggerFilterUpdate() {
+    if (typeof onFilterChangeCallback === 'function') {
+        onFilterChangeCallback();
+    }
+}
+
+/**
+ * Resetta tutti i filtri e ripulisce gli input
+ */
+function resetAllFilters() {
+    activeFilters.domain = '';
+    activeFilters.country = '';
+    activeFilters.service = '';
+
+    const domainInput = document.getElementById('domainSearchInput');
+    const countrySelect = document.getElementById('countrySelect');
+    const serviceSelect = document.getElementById('serviceSelect');
+
+    if (domainInput) domainInput.value = '';
+    if (countrySelect) countrySelect.value = '';
+    if (serviceSelect) serviceSelect.value = '';
+
+    triggerFilterUpdate();
+}
+
+// Esportazione funzioni per uso globale nel browser
+window.filterManager = {
+    init: initFilterManager,
+    updateAvailableFilters,
+    isPacketMatchingFilters,
+    resetAllFilters
+};
