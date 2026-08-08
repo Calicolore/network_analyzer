@@ -1,0 +1,416 @@
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #0f172a;
+    color: #f1f5f9;
+    margin: 0;
+    padding: 20px;
+}
+
+h1 {
+    color: #38bdf8;
+    border-bottom: 2px solid #1e293b;
+    padding-bottom: 10px;
+    margin-bottom: 30px;
+}
+
+/* --- INTESTAZIONE SEZIONE CON BOTTONE --- */
+.section-header {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 15px;
+    margin-top: 20px;
+    margin-bottom: 15px;
+    border-bottom: 1px solid #1e293b;
+    padding-bottom: 8px;
+}
+
+.section-header h2 {
+    color: #94a3b8;
+    font-size: 1.4rem;
+    margin: 0;
+    border: none;
+    padding: 0;
+}
+
+/* BOTTONE ACCORDION TENDINA */
+.accordion-btn {
+    background: #1e293b;
+    color: #38bdf8;
+    border: 1px solid #334155;
+    padding: 4px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 0.8rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+}
+
+.accordion-btn:hover {
+    background: #334155;
+    color: #f1f5f9;
+}
+
+.accordion-btn .btn-icon {
+    font-size: 0.7rem;
+    transition: transform 0.3s ease;
+}
+
+/* STILI DASHBOARD E ANIMAZIONE CHIUSURA */
+#dashboard {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(450px, 1fr));
+    gap: 20px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    opacity: 1;
+    max-height: 5000px;
+    overflow: hidden;
+}
+
+/* Stato nascosto/chiuso della dashboard */
+#dashboard.collapsed {
+    max-height: 0 !important;
+    opacity: 0;
+    margin: 0;
+    padding: 0;
+    gap: 0;
+    pointer-events: none;
+}
+
+.session-card {
+    background: #1e293b;
+    border-radius: 8px;
+    border-top: 4px solid #38bdf8;
+    padding: 15px;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    display: flex;
+    flex-direction: column;
+    max-height: 400px;
+    cursor: pointer;
+    transition: opacity 0.25s ease, filter 0.25s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.session-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px -2px rgba(56, 189, 248, 0.2);
+}
+
+/* HIGHLIGHT CARD SELEZIONATA */
+.session-card.highlighted-card {
+    border-top-color: #facc15 !important;
+    box-shadow: 0 0 20px rgba(250, 204, 21, 0.5) !important;
+    transform: scale(1.02);
+    outline: 2px solid #facc15;
+    opacity: 1 !important;
+    filter: none !important;
+}
+
+/* CARDS NON SELEZIONATE (SCURITE/DIMMED) */
+.session-card.dimmed-card {
+    opacity: 0.25 !important;
+    filter: grayscale(60%);
+}
+
+.session-card.dimmed-card:hover {
+    opacity: 0.5 !important;
+}
+
+.session-header {
+    font-size: 0.95rem;
+    font-weight: bold;
+    margin-bottom: 10px;
+    color: #f8fafc;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #334155;
+}
+
+.packets-container {
+    overflow-y: auto;
+    flex-grow: 1;
+    font-family: 'Cascadia Code', 'Courier New', monospace;
+    font-size: 11px;
+}
+
+.packet-line {
+    padding: 4px 0;
+    border-bottom: 1px solid #1e293b;
+    white-space: nowrap;
+}
+
+.flags {
+    display: inline-block;
+    background: #334155;
+    padding: 1px 4px;
+    border-radius: 4px;
+    margin: 0 5px;
+    color: #cbd5e1;
+}
+
+.packets-container::-webkit-scrollbar {
+    width: 6px;
+}
+.packets-container::-webkit-scrollbar-thumb {
+    background-color: #475569;
+    border-radius: 10px;
+}
+
+/* --- Contenitore Mappa Ridimensionabile --- */
+#map-container {
+    position: relative;
+    width: 100%;
+    height: 480px;
+    min-height: 200px;
+    max-height: 85vh;
+    overflow: hidden;          
+    margin-bottom: 30px;
+    box-shadow: 0 4px 10px rgb(0 0 0 / 0.3);
+    border-radius: 8px;
+    border: 1px solid #334155;
+    background-color: #111827;
+}
+
+.resize-handle {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 10px;               
+    cursor: ns-resize;          
+    z-index: 1000;              
+    background: transparent;    
+}
+
+.resize-handle:hover,
+.resize-handle:active {
+    background: rgba(56, 189, 248, 0.2);
+}
+
+#map {
+    width: 100%;
+    height: 100%;
+    background-color: #111827;
+}
+
+.leaflet-popup-content-wrapper {
+    background: #1e293b !important;
+    color: #f1f5f9 !important;
+    border: 2px solid #334155 !important;
+    border-radius: 8px !important;
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.5) !important;
+    padding: 4px !important;
+}
+
+.leaflet-popup-tip {
+    background: #1e293b !important;
+    border: 1px solid #334155 !important;
+}
+
+.leaflet-popup-close-button {
+    display: none !important;
+}
+
+.leaflet-popup-content {
+    margin: 12px 15px !important;
+    line-height: 1.5 !important;
+}
+
+/* --- SIDEBAR E OVERLAY --- */
+.overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(2px);
+    z-index: 9998;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+.overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.sidebar {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 320px;
+    height: 100vh;
+    background: #0f172a;
+    border-left: 1px solid #334155;
+    box-shadow: -5px 0 25px rgba(0, 0, 0, 0.5);
+    z-index: 9999;
+    transform: translateX(100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    box-sizing: border-box;
+    color: #f8fafc;
+}
+
+.sidebar.open {
+    transform: translateX(0);
+}
+
+.sidebar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #334155;
+    padding-bottom: 15px;
+    margin-bottom: 20px;
+}
+
+.sidebar-header h3 {
+    margin: 0;
+    font-size: 1.2em;
+    color: #38bdf8;
+}
+
+.close-btn {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 1.8em;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0 5px;
+    border-radius: 4px;
+    transition: color 0.2s, background 0.2s;
+}
+
+.close-btn:hover {
+    color: #f1f5f9;
+    background: #334155;
+}
+
+.setting-item {
+    background: #1e293b;
+    padding: 12px 15px;
+    border-radius: 8px;
+    border: 1px solid #334155;
+}
+
+/* Assicura che i tracciati SVG trasparenti/invisibili intercettino comunque i click */
+.leaflet-interactive {
+    pointer-events: stroke !important;
+}
+
+/* CARD CON CONNESSIONE CHIUSA */
+.session-card.closed-card {
+    border-top-color: #ef4444 !important; /* Bordo rosso */
+}
+
+/* Facoltativo: se desideri che anche il titolo cambi colore quando la connessione è chiusa */
+.session-card.closed-card .res-title {
+    color: #f87171 !important;
+}
+
+/* --- BARRA FILTRI E RICERCA --- */
+.filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    background: #1e293b;
+    padding: 12px 16px;
+    border-radius: 8px;
+    border: 1px solid #334155;
+    margin-bottom: 20px;
+}
+
+.filter-group {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.filter-search {
+    flex-grow: 1;
+    min-width: 250px;
+}
+
+.filter-search input {
+    width: 100%;
+    padding: 8px 32px 8px 12px;
+    background: #0f172a;
+    border: 1px solid #334155;
+    color: #f1f5f9;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.filter-search input:focus {
+    border-color: #38bdf8;
+    box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+}
+
+.clear-btn {
+    position: absolute;
+    right: 8px;
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 1.2rem;
+    cursor: pointer;
+    display: none; /* Visibile solo quando c'è testo */
+}
+
+.clear-btn:hover {
+    color: #f1f5f9;
+}
+
+.filter-group select {
+    background: #0f172a;
+    border: 1px solid #334155;
+    color: #f1f5f9;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    outline: none;
+    cursor: pointer;
+}
+
+.filter-group select:focus {
+    border-color: #38bdf8;
+}
+
+.filter-info {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-left: auto;
+    font-size: 0.85rem;
+    color: #94a3b8;
+}
+
+.reset-btn {
+    background: #334155;
+    color: #f1f5f9;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 600;
+    transition: background 0.2s;
+}
+
+.reset-btn:hover {
+    background: #475569;
+}
+
+/* NASCONDE LE CARD CHE NON SODDISFANO I FILTRI */
+.session-card.filter-hidden {
+    display: none !important;
+}

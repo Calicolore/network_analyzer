@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Analyzer - Mappa Globale</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="style/style.css">
+</head>
+<body>
+
+    <!-- HEADER / BARRA SUPERIORE -->
+    <header style="display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; background: #0f172a; color: white;">
+        <h1 style="margin: 0; font-size: 1.5em;">Network Analyzer - Real Time Map</h1>
+        <button id="open-settings-btn" style="background: #334155; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold;">
+            ⚙️ Impostazioni
+        </button>
+    </header>
+    
+    <!-- CONTENITORE MAPPA RIDIMENSIONABILE -->
+    <div id="map-container">
+        <div id="map"></div>
+        <div id="map-resize-handle" class="resize-handle"></div>
+    </div>
+
+    <!-- INTESTAZIONE SEZIONE SELEZIONE -->
+    <div class="section-header">
+        <h2>Comunicazioni Attive</h2>
+        <button id="toggle-dashboard-btn" class="accordion-btn" title="Nascondi/Mostra Connessioni">
+            <span class="btn-text">Nascondi</span>
+            <span class="btn-icon">▲</span>
+        </button>
+    </div>
+
+    <!-- BARRA FILTRI E RICERCA IN TEMPO REALE -->
+    <div class="filter-bar">
+        <!-- Campo Ricerca Generica -->
+        <div class="filter-group filter-search">
+            <input type="text" id="search-input" placeholder="🔍 Cerca dominio (es. google), IP, nazione, provider..." autocomplete="off">
+            <button id="clear-search-btn" class="clear-btn" title="Cancella testo">&times;</button>
+        </div>
+
+        <!-- Filtro Servizio / Porta -->
+        <div class="filter-group">
+            <select id="service-filter">
+                <option value="ALL">Tutti i Servizi</option>
+                <option value="HTTPS">HTTPS (443)</option>
+                <option value="HTTP">HTTP (80)</option>
+                <option value="DNS">DNS (53)</option>
+                <option value="QUIC">QUIC / UDP</option>
+                <option value="OTHER">Altre Porte</option>
+            </select>
+        </div>
+
+        <!-- Filtro Stato Connessione -->
+        <div class="filter-group">
+            <select id="status-filter">
+                <option value="ALL">Tutti gli Stati</option>
+                <option value="ACTIVE">Solo Attive</option>
+                <option value="CLOSED">Solo Chiuse</option>
+            </select>
+        </div>
+
+        <!-- Contatore e Reset -->
+        <div class="filter-info">
+            <span id="filter-counter">Sessioni: <strong>0 / 0</strong></span>
+            <button id="reset-filters-btn" class="reset-btn">Reset Filtri</button>
+        </div>
+    </div>
+
+    <div id="dashboard"></div>
+
+    <!-- OVERLAY SFONDO SCURO SIDEBAR -->
+    <div id="sidebar-overlay" class="overlay"></div>
+
+    <!-- SIDEBAR IMPOSTAZIONI -->
+    <aside id="settings-sidebar" class="sidebar">
+        <div class="sidebar-header">
+            <h3>Impostazioni</h3>
+            <button id="close-settings-btn" class="close-btn">&times;</button>
+        </div>
+        <div class="sidebar-content">
+            <div class="setting-item">
+                <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+                    <span>Pulizia automatica sessioni</span>
+                    <input type="checkbox" id="auto-clean-toggle">
+                </label>
+            </div>
+            
+            <div id="timeout-container" class="setting-item" style="display: none; margin-top: 15px;">
+                <label for="cleanup-timeout" style="display: block; margin-bottom: 5px; font-size: 0.9em; color: #94a3b8;">
+                    Timeout inattività (secondi):
+                </label>
+                <input type="number" id="cleanup-timeout" value="30" min="5" max="300" style="width: 100%; padding: 6px; background: #1e293b; border: 1px solid #334155; color: white; border-radius: 4px;">
+            </div>
+        </div>
+    </aside>
+
+    <!-- DIPENDENZE ESTERNE -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+
+    <!-- MODULI APPLICATIVI CLIENT -->
+    <script src="scripts/mapManager.js"></script>
+    <script src="scripts/filterManager.js"></script>
+    <script src="scripts/uiManager.js"></script>
+    <script src="scripts/settings.js"></script>
+    <script src="scripts/dashboard.js"></script>
+</body>
+</html>
