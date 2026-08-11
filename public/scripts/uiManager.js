@@ -1,16 +1,26 @@
 /**
- * Gestore dell'Interfaccia Utente (Dashboard, Card e Interazioni UI)
+ * ================================================================================
+ * GESTORE DELL'INTERFACCIA UTENTE E SCHEDE DI SESSIONE (uiManager.js)
+ * ================================================================================
+ * Questo modulo gestisce la creazione, l'aggiornamento dinamico, l'ordinamento
+ * e la rimozione delle schede di sessione (card) nella dashboard.
+ * ================================================================================
  */
 
+// ================================================================================
+// PASSO 1: INIZIALIZZAZIONE ELEMENTI DOM E VARIABILI DI STATO
+// ================================================================================
 const dashboard = document.getElementById('dashboard');
 let sortThrottleTimeout = null;
 
-/**
- * Ordinamento dinamico per consumo di banda
- */
+// ================================================================================
+// PASSO 2: ORDINAMENTO THROTTLED DELLE CARD PER CONSUMO DI BANDA
+// ================================================================================
 function sortCardsByUsage() {
     if (sortThrottleTimeout) return;
 
+    // Esegue il riordinamento DOM a intervalli controllati (1000ms)
+    // per evitare Continuous Layout Reflow durante il flusso intenso di pacchetti
     sortThrottleTimeout = setTimeout(() => {
         const cards = Array.from(dashboard.querySelectorAll('.session-card'));
         if (cards.length < 2) {
@@ -18,27 +28,43 @@ function sortCardsByUsage() {
             return;
         }
 
-        cards.sort((a, b) => {
-            return parseFloat(b.getAttribute('data-kb') || 0) - parseFloat(a.getAttribute('data-kb') || 0);
-        });
+        // Verifica se l'ordine attuale è cambiato prima di toccare il DOM
+        let needsReorder = false;
+        for (let i = 0; i < cards.length - 1; i++) {
+            const kbA = parseFloat(cards[i].getAttribute('data-kb') || 0);
+            const kbB = parseFloat(cards[i + 1].getAttribute('data-kb') || 0);
+            if (kbA < kbB) {
+                needsReorder = true;
+                break;
+            }
+        }
 
-        cards.forEach(card => dashboard.appendChild(card));
+        // Sposta i nodi DOM solo se l'ordinamento è effettivamente variato
+        if (needsReorder) {
+            cards.sort((a, b) => {
+                return parseFloat(b.getAttribute('data-kb') || 0) - parseFloat(a.getAttribute('data-kb') || 0);
+            });
+            cards.forEach(card => dashboard.appendChild(card));
+        }
+
         sortThrottleTimeout = null;
-    }, 10);
+    }, 1000);
 }
 
-/**
- * Genera o aggiorna una scheda di sessione HTML
- */
+// ================================================================================
+// PASSO 3: GENERAZIONE E AGGIORNAMENTO AD ALTE PRESTAZIONI DELLE CARD
+// ================================================================================
 function renderPacketCard(data) {
     let sessionDiv = document.getElementById(data.sessionId);
     
+    // ================================================================================
+    // FASE 1: CREAZIONE NUOVA CARD (SE NON ESISTE) E CACHING ELEMENTI DOM
+    // ================================================================================
     if (!sessionDiv) {
         sessionDiv = document.createElement('div');
         sessionDiv.id = data.sessionId;
         sessionDiv.className = 'session-card';
         
-        // Se c'è una card evidenziata attiva, scurisci subito la nuova arrivata
         if (typeof currentlyHighlightedSessionId !== 'undefined' && currentlyHighlightedSessionId && currentlyHighlightedSessionId !== data.sessionId) {
             sessionDiv.classList.add('dimmed-card');
         }
@@ -65,15 +91,21 @@ function renderPacketCard(data) {
             <div class="packets-container" style="height: 150px; overflow-y: auto; margin: 10px 0; border-top: 1px solid #334155; padding-top: 5px; font-size: 0.85em;"></div>
         `;
         dashboard.appendChild(sessionDiv);
+
+        // Caching dei riferimenti ai nodi interni per evitare querySelector ripetuti ad ogni pacchetto
+        sessionDiv._titleDiv = sessionDiv.querySelector('.res-title');
+        sessionDiv._subContainer = sessionDiv.querySelector('.subtitle-container');
+        sessionDiv._meterEl = sessionDiv.querySelector('.bandwidth-meter');
+        sessionDiv._containerEl = sessionDiv.querySelector('.packets-container');
     } else {
-        // Se la card esiste già ma era stata chiusa (bordo rosso), 
-        // l'arrivo di nuovi pacchetti la fa tornare attiva rimuovendo la classe 'closed-card'
         sessionDiv.classList.remove('closed-card');
     }
 
-    // Auto-riparazione nomi
-    const titleDiv = sessionDiv.querySelector('.res-title');
-    const subContainer = sessionDiv.querySelector('.subtitle-container');
+    // ================================================================================
+    // FASE 2: OTTIMIZZAZIONE E AGGIORNAMENTO TITOLO E SOTTOTITOLO
+    // ================================================================================
+    const titleDiv = sessionDiv._titleDiv;
+    const subContainer = sessionDiv._subContainer;
 
     const isGeneric = (name) => {
         if (!name) return true;
@@ -93,9 +125,8 @@ function renderPacketCard(data) {
         }
     }
 
-    // Gestione Sottotitolo e Validazione Coerenza Domini
     if (subContainer) {
-        const currentTitle = titleDiv.textContent.trim();
+        const currentTitle = titleDiv ? titleDiv.textContent.trim() : '';
         
         const getBaseDomain = (dom) => {
             if (!dom) return '';
@@ -106,7 +137,6 @@ function renderPacketCard(data) {
         const titleBase = getBaseDomain(currentTitle);
         const subBase = getBaseDomain(data.technicalSubtitle);
 
-        // Mostra il sottotitolo solo se non è identico al titolo E appartiene alla stessa radice o se il titolo è generico
         if (data.technicalSubtitle && data.technicalSubtitle !== currentTitle && (titleBase === subBase || titleBase === '')) {
             subContainer.innerHTML = `<div class="technical-subtitle" style="color: #94a3b8; font-size: 0.85em; font-family: monospace; border-left: 2px solid #38bdf8; padding-left: 8px; margin-bottom: 4px;">${data.technicalSubtitle}</div>`;
         } else {
@@ -114,13 +144,18 @@ function renderPacketCard(data) {
         }
     }
 
-    // Aggiornamento KB
+    // ================================================================================
+    // FASE 3: AGGIORNAMENTO METER BANDA E ATTRIBUTI DATI
+    // ================================================================================
     sessionDiv.setAttribute('data-kb', data.totalKB);
-    const meter = sessionDiv.querySelector('.bandwidth-meter');
-    if (meter) meter.innerText = `${data.totalKB} KB Tot.`;
+    if (sessionDiv._meterEl) {
+        sessionDiv._meterEl.innerText = `${data.totalKB} KB Tot.`;
+    }
 
-    // Aggiunta riga pacchetto
-    const container = sessionDiv.querySelector('.packets-container');
+    // ================================================================================
+    // FASE 4: INSERIMENTO RIGA PACCHETTO NEL CONTENITORE
+    // ================================================================================
+    const container = sessionDiv._containerEl;
     const directionCol = data.direction === "-->" ? "#ef4444" : "#22c55e";
     const serviceDisplay = data.service.startsWith('Port:') ? data.service : `Port: ${data.remotePort} - ${data.service}`;
 
@@ -139,10 +174,12 @@ function renderPacketCard(data) {
         container.removeChild(container.firstChild);
     }
     
+    // Auto-scroll del contenitore pacchetti
     container.scrollTop = container.scrollHeight;
 
-    // --- INTEGRAZIONE FILTRI IN TEMPO REALE ---
-    // 1. Assegna le etichette per la ricerca sulla card
+    // ================================================================================
+    // FASE 5: AGGIORNAMENTO DATASET PER FILTRI E VALUTAZIONE
+    // ================================================================================
     sessionDiv.dataset.domain = (data.resourceName || '').toLowerCase();
     sessionDiv.dataset.ip = (data.remoteIp || '').toLowerCase();
     sessionDiv.dataset.country = (data.country || '').toLowerCase();
@@ -150,17 +187,17 @@ function renderPacketCard(data) {
     sessionDiv.dataset.service = (data.service || '').toUpperCase();
     sessionDiv.dataset.closed = sessionDiv.classList.contains('closed-card') ? 'true' : 'false';
 
-    // 2. Valuta se nascondere o mostrare la card in base ai filtri attualmente attivi nella barra
     if (window.FilterManager) {
         window.FilterManager.evaluateNewCard(sessionDiv);
     }
 
+    // Trigger del riordinamento ottimizzato
     sortCardsByUsage();
 }
 
-/**
- * Elimina la card HTML dalla dashboard
- */
+// ================================================================================
+// PASSO 4: RIMOZIONE CARD DALLA DASHBOARD
+// ================================================================================
 function removeSessionCard(sessionId) {
     const sessionDiv = document.getElementById(sessionId);
     if (sessionDiv) {
@@ -168,11 +205,10 @@ function removeSessionCard(sessionId) {
     }
 }
 
-/**
- * Gestore dell'Interfaccia Utente (Tendina Dashboard & Eventi Click)
- */
+// ================================================================================
+// PASSO 5: EVENT LISTENER TENDINA ED EVENTI CLICK SULLE CARD
+// ================================================================================
 document.addEventListener('DOMContentLoaded', () => {
-    // --- ACCORDION / TENDINA DASHBOARD ---
     const toggleDashboardBtn = document.getElementById('toggle-dashboard-btn');
     const dashboardContainer = document.getElementById('dashboard');
 
@@ -193,13 +229,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- DELEGAZIONE EVENTO CLICK SULLE CARD ---
     if (dashboardContainer) {
         dashboardContainer.addEventListener('click', (e) => {
             const card = e.target.closest('.session-card');
             if (!card) return;
 
-            // Se l'utente sta selezionando del testo, ignoriamo il click
             if (window.getSelection().toString().length > 0) return;
 
             const sessionId = card.id;
@@ -210,16 +244,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-/**
- * Imposta lo stato visivo di una card su "Chiusa" (Bordo Rosso)
- */
+// ================================================================================
+// PASSO 6: MARCATURA CHIUSURA SESSIONE (BORDO ROSSO)
+// ================================================================================
 function markSessionClosed(sessionId) {
     const sessionDiv = document.getElementById(sessionId);
     if (sessionDiv) {
         sessionDiv.classList.add('closed-card');
         
-        // --- INTEGRAZIONE FILTRI ---
-        // Segnala al filtro che la connessione è chiusa
         sessionDiv.dataset.closed = 'true';
         if (window.FilterManager) {
             window.FilterManager.evaluateNewCard(sessionDiv);

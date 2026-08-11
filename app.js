@@ -1,138 +1,124 @@
 /**
- * ====================================================================================
+ * ================================================================================
  * ENTRY POINT PRINCIPALE E ORCHESTRATORE APPLICATIVO (app.js)
- * ====================================================================================
- * 
- * SCOPO DEL MODULO:
- * Inizializzare l'infrastruttura di backend, integrare i server web e gli sniffer di rete,
- * e orchestrare i vari servizi dedicati (DNS, porte, traceroute) per elaborare i pacchetti
- * in tempo reale e trasmetterli al frontend via WebSocket.
- * 
- * FUNZIONAMENTO GENERALE:
- * 1. Avvio Server e Network: Rileva l'IP locale del dispositivo e avvia il server Web / Socket.io.
- * 2. Sniffing dei Pacchetti: Attiva l'ascolto della scheda di rete per intercettare i pacchetti in transito.
- * 3. Gestione DNS Intercettati: Invia il payload dei pacchetti DNS al servizio di tracciamento nomi (`dnsService`).
- * 4. Elaborazione Sessione: Esclude il traffico locale/web-app, calcola le metriche di traffico (byte/KB)
- *    e assegna un colore univoco a ciascuna sessione.
- * 5. Rilevamento Chiusura Connessione: Monitora i flag TCP (FIN / RST) per identificare la fine di una sessione.
- * 6. Arricchimento Dati: Risolve il nome del servizio/dominio e recupera la geolocalizzazione dell'IP remoto.
- * 7. Invio Real-Time: Emette gli eventi `new_packet` o `session_closed` verso la dashboard per l'aggiornamento dinamico.
- * ====================================================================================
+ * ================================================================================
+ * Questo modulo costituisce il core dell'applicazione backend. Gestisce l'inizializzazione
+ * delle variabili d'ambiente, avvia il server Web e Socket.IO, configura lo sniffer di rete,
+ * elabora i pacchetti catturati e distribuisce i dati al client via WebSocket in tempo reale.
+ * ================================================================================
  */
 
+// ================================================================================
+// PASSO 1: IMPORTAZIONE DIPENDENZE E MODULI INTERNI
+// ================================================================================
 require('dotenv').config();
 const geoip = require('geoip-lite');
 
-// Moduli di rete e server web
 const { initSniffer } = require('./network/sniffer');
 const { startServer } = require('./server/webServer');
-
-// Utility di rete e supporto
 const { generateRandomColor, getNetworkDeviceIP, translateFlags } = require('./utils/networkUtils');
-
-// Servizi specializzati
 const { resolveResourceDetails, recordDnsQuery } = require('./services/dnsService');
 const { getServiceName } = require('./services/portService');
 const { runNativeTraceroute } = require('./services/traceroute');
 
-// ====================================================================================
-// PASSO 1: INIZIALIZZAZIONE SERVER E RETE
-// ====================================================================================
-
-// Rileva l'indirizzo IP dell'interfaccia di rete attiva nel sistema
+// ================================================================================
+// PASSO 2: CONFIGURAZIONE INIZIALE ED AVVIO SERVER WEB / SOCKET.IO
+// ================================================================================
 const myIp = getNetworkDeviceIP();
 const webPort = 3000; 
 
-// Avvia il server HTTP Express e Socket.io
 const io = startServer(webPort);
 
 console.log(`[SISTEMA] IP Monitorato: ${myIp}`);
 
-// Registri di stato in memoria per la gestione delle sessioni attive
-const sessionColors = new Map();     // Mappa sessionId -> Colore HEX unico
-const sessionTotalBytes = new Map(); // Mappa sessionId -> Totale Byte accumulati
+// ================================================================================
+// PASSO 3: INIZIALIZZAZIONE MAPPE DI STATO E SESSIONI
+// ================================================================================
+const sessionColors = new Map();     // Traccia il colore univoco associato a ciascuna sessione (IP:Porta)
+const sessionTotalBytes = new Map(); // Traccia il volume di traffico accumulato in byte per ciascuna sessione
 
-// ====================================================================================
-// PASSO 2: AVVIO DELLO SNIFFER E CATTURA PACCHETTI
-// ====================================================================================
-
+// ================================================================================
+// PASSO 4: INIZIALIZZAZIONE DELLO SNIFFER DI RETE ED ELABORAZIONE PACCHETTI
+// ================================================================================
 initSniffer(myIp, async (packet) => {
 
-    // A) Intercettazione e registrazione delle query DNS
+    // ================================================================================
+    // FASE 1: GESTIONE PRIORITARIA PACCHETTI DNS
+    // ================================================================================
     if (packet.type === 'DNS') {
         recordDnsQuery(packet.payload);
         return;
     }
 
-    // B) Filtro di sicurezza: Ignoriamo il traffico WebSocket generato dalla dashboard stessa
+    // ================================================================================
+    // FASE 2: FILTRO TRAFFICO GENERATO DALLA DASHBOARD
+    // ================================================================================
     if (packet.srcPort === webPort || packet.dstPort === webPort) return;
 
-    // C) Determinazione della direzione della comunicazione (Inbound / Outbound)
+    // ================================================================================
+    // FASE 3: CALCOLO DIREZIONE E IDENTIFICATIVO SESSIONE
+    // ================================================================================
     const isOutbound = packet.src === myIp;
     const remoteIp = isOutbound ? packet.dst : packet.src;
     const remotePort = isOutbound ? packet.dstPort : packet.srcPort;
     const sessionId = `${remoteIp}:${remotePort}`;
 
     // ================================================================================
-    // PASSO 3: GESTIONE SESSIONI, COLORI E TRACEROUTE
+    // FASE 4: REGISTRAZIONE SESSIONE, COLORE ED ESECUZIONE TRACEROUTE
     // ================================================================================
-
-    // Assegnazione colore univoco alla sessione e avvio del traceroute se la sessione è nuova
     if (!sessionColors.has(sessionId)) {
         sessionColors.set(sessionId, generateRandomColor());
         
-        // Avvia il traceroute solo per indirizzi IP pubblici (non locali/loopback)
+        // Esegue il traceroute solo per indirizzi pubblici (escludendo reti locali e loopback)
         if (!remoteIp.startsWith('192.168.') && !remoteIp.startsWith('127.')) {
             runNativeTraceroute(remoteIp, io);
         }
     }
     const sessionColor = sessionColors.get(sessionId);
-    
-    // ================================================================================
-    // PASSO 4: CALCOLO DEL TRAFFICO DATI
-    // ================================================================================
 
-    // Aggiornamento del contatore cumulativo dei byte trasferiti nella sessione
+    // ================================================================================
+    // FASE 5: ACCUMULO E CALCOLO VOLUME DI TRAFFICO (KB)
+    // ================================================================================
     let totalBytes = (sessionTotalBytes.get(sessionId) || 0) + (packet.size || 0);
     sessionTotalBytes.set(sessionId, totalBytes);
     const totalKB = (totalBytes / 1024).toFixed(2);
 
     // ================================================================================
-    // PASSO 5: ARRICCHIMENTO DATI (DNS, NOME SERVIZIO, GEOLOCALIZZAZIONE)
+    // FASE 6: RISOLUZIONE DETTAGLI RISORSA (DNS, SNI TLS, PROVIDER)
     // ================================================================================
-
-    // Risoluzione dei dettagli DNS procedurale (Titolo risorsa e Sottotitolo tecnico)
-    // Passiamo packet.payload per permettere anche il controllo TLS SNI
     const { hostName, resourceName, technicalSubtitle, provider } = await resolveResourceDetails(remoteIp, packet.payload);
     
-    // Identificazione del nome del servizio/protocollo
+    // ================================================================================
+    // FASE 7: IDENTIFICAZIONE SERVIZIO / PROTOCOLLO APPLICATIVO
+    // ================================================================================
     const serviceName = getServiceName(remotePort, packet.service);
 
-    // Recupero delle coordinate geografiche dell'IP remoto per la mappa
+    // ================================================================================
+    // FASE 8: GEOLOCALIZZAZIONE IP REMOTO
+    // ================================================================================
     const geo = geoip.lookup(remoteIp);
     const lat = geo ? geo.ll[0] : null;
     const lon = geo ? geo.ll[1] : null;
 
-    // Traduzione e analisi dei flag TCP per la gestione dello stato della connessione
+    // ================================================================================
+    // FASE 9: TRADUZIONE FLAG TCP E DIMENSIONE PACCHETTO
+    // ================================================================================
     const readableFlags = translateFlags(packet.flags);
-
-    // ================================================================================
-    // PASSO 6: EMISSIONE WEBSOCKET AL FRONTEND
-    // ================================================================================
-
-    // Estrazione della dimensione del pacchetto (supporta vari formati di pcap/raw-socket)
     const packetSizeBytes = packet.size || packet.length || packet.len || (packet.pcap_header ? packet.pcap_header.len : 0) || 0;
 
-    io.emit('new_packet', {
+    // ================================================================================
+    // FASE 10: COSTRUZIONE DTO METADATI PACCHETTO
+    // ================================================================================
+    const packetData = {
         sessionId,
         remoteIp,
         hostName,
         resourceName,
         technicalSubtitle,
-        provider: provider,
+        provider,
         totalKB,
         size: packetSizeBytes, 
-        isOutbound: isOutbound, 
+        isOutbound, 
         remotePort,
         sessionColor,
         service: serviceName,
@@ -142,20 +128,23 @@ initSniffer(myIp, async (packet) => {
         direction: isOutbound ? "-->" : "<--",
         flags: readableFlags,
         time: packet.timestamp
-    });
+    };
 
     // ================================================================================
-    // PASSO 7: RILEVAMENTO E NOTIFICA CHIUSURA CONNESSIONE (TCP FIN / RST)
+    // FASE 11: EMISSIONE WEBSOCKET IMMEDIATA AL FRONTEND (IN TEMPO REALE)
     // ================================================================================
+    io.emit('new_packet', packetData);
 
-    // Se i flag indicano la chiusura del socket (FIN o RST), notifichiamo il client
+    // ================================================================================
+    // FASE 12: GESTIONE CHIUSURA SESSIONE (FLAG FIN O RST)
+    // ================================================================================
     if (readableFlags.includes('FIN') || readableFlags.includes('RST')) {
         io.emit('session_closed', {
             sessionId,
             reason: readableFlags.includes('RST') ? 'Reset' : 'Finished'
         });
 
-        // Pulizia dello stato in memoria della sessione terminata
+        // Pulizia delle mappe in memoria per liberare risorse
         sessionColors.delete(sessionId);
         sessionTotalBytes.delete(sessionId);
     }

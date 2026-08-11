@@ -13,6 +13,7 @@ const execPromise = util.promisify(exec);
 const hostCache = new Map();         // Cache Reverse DNS
 const ipToDomainMap = new Map();     // Mappa IP -> Dominio da DNS/SNI
 const systemDnsCache = new Map();    // Mappa IP -> Dominio estratto da Windows DNS Cache
+const resolvedResourceCache = new Map(); // Cache finale dei dettagli per IP
 
 // Normalizzazione CDN e Servizi Noti
 const CDN_MAPPING = [
@@ -25,9 +26,6 @@ const CDN_MAPPING = [
     { pattern: 'youtube.com', target: 'youtube.com' }
 ];
 
-/**
- * Normalizza un nome dominio se appartiene a una CDN nota
- */
 function normalizeDomain(domain) {
     if (!domain) return null;
     const d = domain.toLowerCase().trim();
@@ -40,9 +38,6 @@ function normalizeDomain(domain) {
     return d;
 }
 
-/**
- * Verifica se un nome è valido o se è un'infrastruttura generica.
- */
 function isValidHostname(name, ip) {
     if (!name) return false;
     const n = name.toLowerCase().trim();
@@ -50,7 +45,6 @@ function isValidHostname(name, ip) {
     if (n === "" || n === "risorsa web" || n === ip) return false;
     if (n.endsWith('.in-addr.arpa') || n.endsWith('.ip6.arpa')) return false;
 
-    // Se contiene host di infrastruttura cloud generica non è un nome finale valido
     const genericPatterns = ['1e100.net', 'googleusercontent.com', 'cloudfront.net', 'amazonaws.com'];
     for (const pattern of genericPatterns) {
         if (n.includes(pattern)) return false;
@@ -59,9 +53,6 @@ function isValidHostname(name, ip) {
     return true;
 }
 
-/**
- * Sincronizza periodica in background la Cache DNS di Windows in memoria.
- */
 async function syncSystemDnsCache() {
     try {
         const command = `powershell -NoProfile -Command "Get-DnsClientCache | Select-Object Entry, Data | ConvertTo-Json"`;
@@ -81,22 +72,15 @@ async function syncSystemDnsCache() {
                 }
             }
         }
-    } catch (e) {
-        // Ignora eventuali errori di parsing/esecuzione
-    }
+    } catch (e) { }
 }
 
-// Avvia il sync della Cache OS ogni 4 secondi in background
 setInterval(syncSystemDnsCache, 4000);
 syncSystemDnsCache();
 
-/**
- * ESTRAZIONE TLS SNI (Server Name Indication)
- */
 function extractSNIFromTLS(buffer) {
     try {
         if (!buffer || !Buffer.isBuffer(buffer) || buffer.length < 43) return null;
-
         if (buffer[0] !== 0x16) return null;
 
         let offset = 5;
@@ -142,9 +126,6 @@ function extractSNIFromTLS(buffer) {
     return null;
 }
 
-/**
- * Parsing delle risposte DNS intercettate dallo sniffer
- */
 function parseDNSResponse(buffer) {
     try {
         if (!buffer || !Buffer.isBuffer(buffer) || buffer.length < 12) return null;
@@ -162,7 +143,6 @@ function parseDNSResponse(buffer) {
         if (qdcount === 0) return null;
 
         let offset = dnsOffset + 12;
-
         let parts = [];
         while (offset < buffer.length) {
             let len = buffer[offset];
@@ -216,9 +196,6 @@ function parseDNSResponse(buffer) {
     }
 }
 
-/**
- * Reverse DNS Lookup con Cache
- */
 async function getHostName(ip) {
     if (hostCache.has(ip)) return hostCache.get(ip);
     
@@ -236,9 +213,6 @@ async function getHostName(ip) {
     return ip;
 }
 
-/**
- * Registra le query/risposte DNS catturate dallo sniffer
- */
 function recordDnsQuery(packetPayload) {
     const result = parseDNSResponse(packetPayload);
     if (result && result.domain && result.ips && result.ips.length > 0) {
@@ -248,9 +222,6 @@ function recordDnsQuery(packetPayload) {
     }
 }
 
-/**
- * Mantiene aggiornata la mappa DNS
- */
 function associateIpWithDomain(ip, domain) {
     if (!ip || !domain) return;
     const normalized = normalizeDomain(domain);
@@ -260,9 +231,6 @@ function associateIpWithDomain(ip, domain) {
     }
 }
 
-/**
- * Riconosce automaticamente il Datacenter o Provider dall'IP, hostname o sottotitolo
- */
 function detectProvider(ip, hostName, subtitle) {
     const combined = `${ip} ${hostName || ''} ${subtitle || ''}`.toLowerCase();
     
@@ -282,9 +250,14 @@ function detectProvider(ip, hostName, subtitle) {
 }
 
 /**
- * PIPELINE PROCEDURALE PRINCIPALE
+ * PIPELINE PROCEDURALE CON CACHE RISULTATI
  */
 async function resolveResourceDetails(remoteIp, packetPayload = null) {
+    // Controllo immediato in cache per evitare rilavorazioni
+    if (resolvedResourceCache.has(remoteIp)) {
+        return resolvedResourceCache.get(remoteIp);
+    }
+
     const rawHostName = await getHostName(remoteIp);
 
     const getRootDomain = (domain) => {
@@ -313,16 +286,14 @@ async function resolveResourceDetails(remoteIp, packetPayload = null) {
         technicalSubtitle: rawHostName !== remoteIp ? rawHostName : ""
     };
 
-    // 1. Query DNS Intercettata in Mappa
-    const directDomain = ipToDomainMap.get(remoteIp);
-    if (isValidHostname(directDomain, remoteIp)) {
+    if (isValidHostname(ipToDomainMap.get(remoteIp), remoteIp)) {
+        const directDomain = ipToDomainMap.get(remoteIp);
         resolvedDetails = {
             hostName: directDomain,
             resourceName: directDomain,
             technicalSubtitle: sanitizeSubtitle(directDomain, rawHostName)
         };
     }
-    // 2. Ispezione SNI TLS
     else if (packetPayload) {
         const sniDomain = extractSNIFromTLS(packetPayload);
         if (sniDomain) {
@@ -337,7 +308,6 @@ async function resolveResourceDetails(remoteIp, packetPayload = null) {
             }
         }
     }
-    // 3. Reverse DNS
     else if (isValidHostname(rawHostName, remoteIp)) {
         resolvedDetails = {
             hostName: rawHostName,
@@ -345,7 +315,6 @@ async function resolveResourceDetails(remoteIp, packetPayload = null) {
             technicalSubtitle: getRootDomain(rawHostName)
         };
     }
-    // 4. Cache DNS OS
     else {
         const sysDomain = systemDnsCache.get(remoteIp);
         if (isValidHostname(sysDomain, remoteIp)) {
@@ -369,8 +338,12 @@ async function resolveResourceDetails(remoteIp, packetPayload = null) {
         }
     }
 
-    // Aggiunge l'identificazione automatica del Provider / Datacenter
     resolvedDetails.provider = detectProvider(remoteIp, resolvedDetails.hostName, resolvedDetails.technicalSubtitle);
+
+    // Salva in cache se la risoluzione ha fornito un nome valido
+    if (resolvedDetails.resourceName !== "Risorsa Web" || resolvedDetails.hostName !== remoteIp) {
+        resolvedResourceCache.set(remoteIp, resolvedDetails);
+    }
 
     return resolvedDetails;
 }
