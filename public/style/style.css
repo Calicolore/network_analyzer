@@ -518,3 +518,22 @@ h1 {
     width: 100%;
     height: 120px;
 }
+
+.btn-chart-type {
+    background: #0f172a;
+    color: #94a3b8;
+    border: 1px solid #334155;
+    padding: 4px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: all 0.2s ease;
+}
+
+.btn-chart-type.active,
+.btn-chart-type:hover {
+    background: #38bdf8;
+    color: #0f172a;
+    font-weight: bold;
+    border-color: #38bdf8;
+}
