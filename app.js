@@ -20,6 +20,7 @@ const { generateRandomColor, getNetworkDeviceIP, translateFlags } = require('./u
 const { resolveResourceDetails, recordDnsQuery } = require('./services/dnsService');
 const { getServiceName } = require('./services/portService');
 const { runNativeTraceroute } = require('./services/traceroute');
+const { upsertSession, updateSessionStatus } = require('./database/dbService');
 
 // ================================================================================
 // PASSO 2: CONFIGURAZIONE INIZIALE ED AVVIO SERVER WEB / SOCKET.IO
@@ -136,9 +137,24 @@ initSniffer(myIp, async (packet) => {
     };
 
     // ================================================================================
-    // FASE 11: EMISSIONE WEBSOCKET IMMEDIATA AL FRONTEND (IN TEMPO REALE)
+    // FASE 11: EMISSIONE WEBSOCKET IMMEDIATA E SALVATAGGIO DATABASE
     // ================================================================================
     io.emit('new_packet', packetData);
+
+    // Salvataggio / Aggiornamento in tempo reale nel Database SQLite
+    upsertSession({
+        sessionId,
+        remoteIp,
+        remotePort,
+        hostName,
+        resourceName,
+        technicalSubtitle,
+        provider,
+        country: packet.country || 'N/A',
+        service: serviceName,
+        totalBytes,
+        time: packet.timestamp
+    });
 
     // ================================================================================
     // FASE 12: GESTIONE CHIUSURA SESSIONE (FLAG FIN O RST)
@@ -148,6 +164,9 @@ initSniffer(myIp, async (packet) => {
             sessionId,
             reason: readableFlags.includes('RST') ? 'Reset' : 'Finished'
         });
+
+        // Aggiorna lo stato nel database
+        updateSessionStatus(sessionId, 'closed');
 
         // Pulizia delle mappe in memoria per liberare risorse
         sessionColors.delete(sessionId);
@@ -181,6 +200,9 @@ setInterval(() => {
                 sessionId,
                 reason: 'Idle Timeout'
             });
+
+            // Aggiorna lo stato nel database
+            updateSessionStatus(sessionId, 'idle');
 
             // Rimuovi le informazioni dalla memoria backend
             sessionColors.delete(sessionId);
