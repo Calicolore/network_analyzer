@@ -34,8 +34,10 @@ console.log(`[SISTEMA] IP Monitorato: ${myIp}`);
 // ================================================================================
 // PASSO 3: INIZIALIZZAZIONE MAPPE DI STATO E SESSIONI
 // ================================================================================
-const sessionColors = new Map();     // Traccia il colore univoco associato a ciascuna sessione (IP:Porta)
-const sessionTotalBytes = new Map(); // Traccia il volume di traffico accumulato in byte per ciascuna sessione
+const sessionColors = new Map();        // Traccia il colore univoco associato a ciascuna sessione (IP:Porta)
+const sessionTotalBytes = new Map();    // Traccia il volume di traffico accumulato in byte per ciascuna sessione
+const sessionLastSeen = new Map();      // Traccia l'ultimo timestamp (ms) di attività della sessione
+const sessionResourceNames = new Map(); // Traccia il nome della risorsa assegnata alla sessione
 
 // ================================================================================
 // PASSO 4: INIZIALIZZAZIONE DELLO SNIFFER DI RETE ED ELABORAZIONE PACCHETTI
@@ -87,6 +89,9 @@ initSniffer(myIp, async (packet) => {
     // FASE 6: RISOLUZIONE DETTAGLI RISORSA (DNS, SNI TLS, PROVIDER)
     // ================================================================================
     const { hostName, resourceName, technicalSubtitle, provider } = await resolveResourceDetails(remoteIp, packet.payload);
+    
+    sessionLastSeen.set(sessionId, Date.now());
+    sessionResourceNames.set(sessionId, resourceName);
     
     // ================================================================================
     // FASE 7: IDENTIFICAZIONE SERVIZIO / PROTOCOLLO APPLICATIVO
@@ -147,5 +152,41 @@ initSniffer(myIp, async (packet) => {
         // Pulizia delle mappe in memoria per liberare risorse
         sessionColors.delete(sessionId);
         sessionTotalBytes.delete(sessionId);
+        sessionLastSeen.delete(sessionId);
+        sessionResourceNames.delete(sessionId);
     }
 });
+
+// ================================================================================
+// PASSO 5: PULIZIA AUTOMATICA CONNESSIONI INATTIVE ("Risorsa Web")
+// ================================================================================
+const IDLE_TIMEOUT_MS = 20 * 1000;    // Tempo max di inattività (20 secondi)
+const CLEANUP_CHECK_MS = 5 * 1000;    // Controllo ogni 5 secondi
+
+setInterval(() => {
+    const now = Date.now();
+
+    for (const [sessionId, lastSeen] of sessionLastSeen.entries()) {
+        const resourceName = sessionResourceNames.get(sessionId) || '';
+        
+        // Individua risorse anonime/generiche
+        const isAnonymous = resourceName === 'Risorsa Web' || resourceName === '' || resourceName.includes('1e100.net');
+        const isIdle = (now - lastSeen) >= IDLE_TIMEOUT_MS;
+
+        if (isAnonymous && isIdle) {
+            console.log(`[CLEANUP] Chiusa risorsa inattiva per timeout: ${sessionId} (${resourceName})`);
+
+            // Notifica il Frontend via Socket per aggiornare o ingrigire la card
+            io.emit('session_closed', {
+                sessionId,
+                reason: 'Idle Timeout'
+            });
+
+            // Rimuovi le informazioni dalla memoria backend
+            sessionColors.delete(sessionId);
+            sessionTotalBytes.delete(sessionId);
+            sessionLastSeen.delete(sessionId);
+            sessionResourceNames.delete(sessionId);
+        }
+    }
+}, CLEANUP_CHECK_MS);

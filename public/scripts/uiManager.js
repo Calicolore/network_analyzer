@@ -52,7 +52,7 @@ function sortCardsByUsage() {
 }
 
 // ================================================================================
-// PASSO 3: GENERAZIONE E AGGIORNAMENTO AD ALTE PRESTAZIONI DELLE CARD
+// PASSO 3: GENERAZIONE E AGGIORNAMENTO DELLE CARD
 // ================================================================================
 function renderPacketCard(data) {
     let sessionDiv = document.getElementById(data.sessionId);
@@ -98,7 +98,9 @@ function renderPacketCard(data) {
         sessionDiv._meterEl = sessionDiv.querySelector('.bandwidth-meter');
         sessionDiv._containerEl = sessionDiv.querySelector('.packets-container');
     } else {
+        // Se arrivano nuovi pacchetti, la sessione torna attiva
         sessionDiv.classList.remove('closed-card');
+        sessionDiv.classList.remove('idle-card');
     }
 
     // ================================================================================
@@ -185,7 +187,10 @@ function renderPacketCard(data) {
     sessionDiv.dataset.country = (data.country || '').toLowerCase();
     sessionDiv.dataset.provider = (data.provider || '').toLowerCase();
     sessionDiv.dataset.service = (data.service || '').toUpperCase();
-    sessionDiv.dataset.closed = sessionDiv.classList.contains('closed-card') ? 'true' : 'false';
+    
+    // Considera chiusa sia la connessione FIN/RST che quella in Timeout
+    const isClosedOrIdle = sessionDiv.classList.contains('closed-card') || sessionDiv.classList.contains('idle-card');
+    sessionDiv.dataset.closed = isClosedOrIdle ? 'true' : 'false';
 
     if (window.FilterManager) {
         window.FilterManager.evaluateNewCard(sessionDiv);
@@ -245,14 +250,22 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ================================================================================
-// PASSO 6: MARCATURA CHIUSURA SESSIONE (BORDO ROSSO)
+// PASSO 6: MARCATURA CHIUSURA SESSIONE 
 // ================================================================================
-function markSessionClosed(sessionId) {
+function markSessionClosed(sessionId, reason) {
     const sessionDiv = document.getElementById(sessionId);
     if (sessionDiv) {
-        sessionDiv.classList.add('closed-card');
+        
+        if (reason === 'Idle Timeout') {
+            // Se è chiusa per inattività -> diventa GRIGIA / OPACA
+            sessionDiv.classList.add('dimmed-card');
+        } else {
+            // Se è chiusa normalmente (FIN/RST) -> diventa ROSSA
+            sessionDiv.classList.add('closed-card');
+        }
         
         sessionDiv.dataset.closed = 'true';
+        
         if (window.FilterManager) {
             window.FilterManager.evaluateNewCard(sessionDiv);
         }

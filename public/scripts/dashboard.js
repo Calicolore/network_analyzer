@@ -98,7 +98,8 @@ socket.on('traceroute_hop', (data) => {
 
 socket.on('session_closed', (data) => {
     if (typeof markSessionClosed === 'function') {
-        markSessionClosed(data.sessionId);
+        // Passiamo sia l'ID che il motivo della chiusura
+        markSessionClosed(data.sessionId, data.reason); 
     }
 });
 
