@@ -20,7 +20,7 @@ const { generateRandomColor, getNetworkDeviceIP, translateFlags } = require('./u
 const { resolveResourceDetails, recordDnsQuery } = require('./services/dnsService');
 const { getServiceName } = require('./services/portService');
 const { runNativeTraceroute } = require('./services/traceroute');
-const { upsertSession, updateSessionStatus } = require('./database/dbService');
+const { upsertSession, updateSessionStatus, closeAllActiveSessions } = require('./database/dbService');
 
 // ================================================================================
 // PASSO 2: CONFIGURAZIONE INIZIALE ED AVVIO SERVER WEB / SOCKET.IO
@@ -31,6 +31,21 @@ const webPort = 3000;
 const io = startServer(webPort);
 
 console.log(`[SISTEMA] IP Monitorato: ${myIp}`);
+
+// Helper per formattare data e ora complete (GG/MM/AAAA, HH:mm:ss)
+function getFullFormattedDateTime(rawTime) {
+    const dateObj = rawTime ? new Date(rawTime) : new Date();
+    const validDate = isNaN(dateObj.getTime()) ? new Date() : dateObj;
+    
+    return validDate.toLocaleString('it-IT', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    });
+}
 
 // ================================================================================
 // PASSO 3: INIZIALIZZAZIONE MAPPE DI STATO E SESSIONI
@@ -115,6 +130,8 @@ initSniffer(myIp, async (packet) => {
     // ================================================================================
     // FASE 10: COSTRUZIONE DTO METADATI PACCHETTO
     // ================================================================================
+    const formattedTime = getFullFormattedDateTime(packet.timestamp);
+
     const packetData = {
         sessionId,
         remoteIp,
@@ -133,7 +150,7 @@ initSniffer(myIp, async (packet) => {
         lon,
         direction: isOutbound ? "-->" : "<--",
         flags: readableFlags,
-        time: packet.timestamp
+        time: formattedTime
     };
 
     // ================================================================================
@@ -153,7 +170,7 @@ initSniffer(myIp, async (packet) => {
         country: packet.country || 'N/A',
         service: serviceName,
         totalBytes,
-        time: packet.timestamp
+        formattedTime
     });
 
     // ================================================================================
@@ -212,3 +229,15 @@ setInterval(() => {
         }
     }
 }, CLEANUP_CHECK_MS);
+
+// ================================================================================
+// PASSO 6: GESTIONE CHIUSURA PULITA DEL PROCESSO
+// ================================================================================
+function handleShutdown() {
+    console.log('\n[SISTEMA] Chiusura applicazione in corso...');
+    closeAllActiveSessions();
+    process.exit(0);
+}
+
+process.on('SIGINT', handleShutdown);
+process.on('SIGTERM', handleShutdown);

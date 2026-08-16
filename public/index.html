@@ -3,103 +3,176 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Network Analyzer - Mappa Globale</title>
+    <title>Network Analyzer - Real Time & Analytics</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="style/style.css">
+    <link rel="stylesheet" href="style/analytics.css">
+    <style>
+        .spa-view.hidden {
+            display: none !important;
+        }
+        .nav-link.active {
+            background: #2563eb !important;
+            color: #ffffff !important;
+        }
+    </style>
 </head>
 <body>
 
-    <!-- HEADER / BARRA SUPERIORE -->
+    <!-- HEADER / BARRA SUPERIORE DI NAVIGAZIONE -->
     <header style="display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; background: #0f172a; color: white;">
-        <h1 style="margin: 0; font-size: 1.5em;">Network Analyzer - Real Time Map</h1>
+        <h1 style="margin: 0; font-size: 1.5em; border: none; padding: 0;">Network Analyzer</h1>
         
         <div style="display: flex; gap: 10px; align-items: center;">
-            <!-- NUOVO BOTTONE / LINK VERSO ANALYTICS -->
-            <a href="analytics.html" style="background: #2563eb; color: white; border: none; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 0.9em; display: inline-flex; align-items: center; gap: 6px;">
-                📊 Analytics & Filtri
-            </a>
-
+            <button id="nav-btn-live" class="nav-link active" style="background: #334155; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.9em;">
+                🌐 Live Traffic
+            </button>
+            <button id="nav-btn-analytics" class="nav-link" style="background: #334155; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.9em;">
+                📊 Analytics & Filtri DB
+            </button>
             <button id="open-settings-btn" style="background: #334155; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold;">
                 ⚙️ Impostazioni
             </button>
         </div>
     </header>
-    
-    <!-- CONTENITORE MAPPA RIDIMENSIONABILE -->
-    <div id="map-container">
-        <div id="map"></div>
-        <div id="map-resize-handle" class="resize-handle"></div>
-    </div>
 
-    <!-- INTESTAZIONE SEZIONE GRAFICO BANDWIDTH -->
-    <div class="section-header" style="display: flex; justify-content: space-between; align-items: center;">
-    <div style="display: flex; align-items: center; gap: 15px;">
-        <h2 style="margin: 0;">📊 Consumo di Banda</h2>
+    <!-- =================================================================== -->
+    <!-- VISTA 1: TEMPO REALE (MAPPA, GRAFICO E CARDS LIVE)                 -->
+    <!-- =================================================================== -->
+    <div id="view-live" class="spa-view">
         
-        <!-- Toggle Tipo Grafico -->
-        <div class="chart-view-selector" style="display: flex; gap: 5px;">
-            <button id="btn-chart-line" class="btn-chart-type active">📈 Temporale</button>
-            <button id="btn-chart-bar" class="btn-chart-type">📊 Per Connessione</button>
+        <!-- CONTENITORE MAPPA RIDIMENSIONABILE -->
+        <div id="map-container" style="margin-top: 20px;">
+            <div id="map"></div>
+            <div id="map-resize-handle" class="resize-handle"></div>
         </div>
 
-        <span id="bandwidth-stats-text" class="stats-text" style="color: #94a3b8; font-size: 0.9em; font-weight: bold;">
-            Download: 0.0 KB/s | Upload: 0.0 KB/s
-        </span>
-    </div>
-    <button id="toggle-bandwidth-btn" class="accordion-btn" title="Nascondi/Mostra Grafico">
-        <span class="btn-text">Nascondi</span>
-        <span class="btn-icon">▲</span>
-    </button>
-</div>
+        <!-- INTESTAZIONE SEZIONE GRAFICO BANDWIDTH -->
+        <div class="section-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <h2 style="margin: 0;">📊 Consumo di Banda</h2>
+                
+                <div class="chart-view-selector" style="display: flex; gap: 5px;">
+                    <button id="btn-chart-line" class="btn-chart-type active">📈 Temporale</button>
+                    <button id="btn-chart-bar" class="btn-chart-type">📊 Per Connessione</button>
+                </div>
 
-    <!-- GRAFICO DEL TRAFFICO GLOBALE -->
-    <div id="bandwidth-container" class="chart-container-box">
-        <!-- Altezza aumentata a 280px per evitare l'effetto "basso e tozzo" -->
-        <div class="chart-wrapper" style="height: 280px; position: relative; width: 100%;">
-            <canvas id="bandwidthChart"></canvas>
+                <span id="bandwidth-stats-text" class="stats-text" style="color: #94a3b8; font-size: 0.9em; font-weight: bold;">
+                    Download: 0.0 KB/s | Upload: 0.0 KB/s
+                </span>
+            </div>
+            <button id="toggle-bandwidth-btn" class="accordion-btn" title="Nascondi/Mostra Grafico">
+                <span class="btn-text">Nascondi</span>
+                <span class="btn-icon">▲</span>
+            </button>
+        </div>
+
+        <!-- GRAFICO DEL TRAFFICO GLOBALE -->
+        <div id="bandwidth-container" class="chart-container-box">
+            <div class="chart-wrapper" style="height: 280px; position: relative; width: 100%;">
+                <canvas id="bandwidthChart"></canvas>
+            </div>
+        </div>
+
+        <!-- INTESTAZIONE SEZIONE COMUNICAZIONI ATTIVE -->
+        <div class="section-header">
+            <h2>Comunicazioni Attive</h2>
+            <button id="toggle-dashboard-btn" class="accordion-btn" title="Nascondi/Mostra Connessioni">
+                <span class="btn-text">Nascondi</span>
+                <span class="btn-icon">▲</span>
+            </button>
+        </div>
+
+        <!-- BARRA DI RICERCA E FILTRI LIVE -->
+        <div class="search-filter-bar">
+            <div class="search-box">
+                <input type="text" id="domainSearchInput" placeholder="🔍 Cerca dominio (es. youtube, google, x)..." autocomplete="off" />
+            </div>
+
+            <div class="filter-dropdowns">
+                <select id="countrySelect">
+                    <option value="">Tutte le Nazioni</option>
+                </select>
+
+                <select id="serviceSelect">
+                    <option value="">Tutti i Servizi/Porte</option>
+                </select>
+
+                <button id="resetFiltersBtn" class="btn-reset">Reset Filtri</button>
+            </div>
+        </div>
+
+        <!-- CONTENITORE DASHBOARD CARDS LIVE -->
+        <div id="dashboard"></div>
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- VISTA 2: DATABASE & ANALYTICS                                      -->
+    <!-- =================================================================== -->
+    <div id="view-analytics" class="spa-view hidden" style="margin-top: 20px;">
+        
+        <!-- SEZIONE FILTRI DINAMICI -->
+        <div class="filter-section">
+            <h3>🔍 Selezione Filtri Database</h3>
+            <p style="color: #94a3b8; font-size: 0.9em; margin-bottom: 10px;">
+                Seleziona i parametri salvati nel Database SQLite.
+            </p>
+
+            <div class="filter-controls">
+                <div class="filter-group">
+                    <label for="select-country">Nazione</label>
+                    <select id="select-country"><option value="">Tutte le Nazioni</option></select>
+                </div>
+
+                <div class="filter-group">
+                    <label for="select-service">Servizio / Porta</label>
+                    <select id="select-service"><option value="">Tutti i Servizi</option></select>
+                </div>
+
+                <div class="filter-group">
+                    <label for="select-provider">Provider / ISP</label>
+                    <select id="select-provider"><option value="">Tutti i Provider</option></select>
+                </div>
+
+                <div class="filter-group">
+                    <label for="select-status">Stato Sessione</label>
+                    <select id="select-status"><option value="">Tutti gli Stati</option></select>
+                </div>
+            </div>
+
+            <!-- CHIPS FILTRI ATTIVI -->
+            <div class="active-filters-container" id="active-filters-box">
+                <span style="font-size: 0.85em; color: #94a3b8;">Filtri attivi:</span>
+                <em id="no-filters-text" style="color: #64748b; font-size: 0.85em;">Nessuno</em>
+            </div>
+        </div>
+
+        <!-- TABELLA RISULTATI CON ORDINAMENTO COLONNE -->
+        <div class="results-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th data-sort="remote_ip" class="sortable">IP Remoto <span class="sort-icon">⇅</span></th>
+                        <th data-sort="host_name" class="sortable">Hostname <span class="sort-icon">⇅</span></th>
+                        <th data-sort="country" class="sortable">Nazione <span class="sort-icon">⇅</span></th>
+                        <th data-sort="service" class="sortable">Servizio <span class="sort-icon">⇅</span></th>
+                        <th data-sort="provider" class="sortable">Provider <span class="sort-icon">⇅</span></th>
+                        <th data-sort="total_bytes" class="sortable">Byte Totali <span class="sort-icon">⇅</span></th>
+                        <th data-sort="status" class="sortable">Stato <span class="sort-icon">⇅</span></th>
+                        <th data-sort="last_seen" class="sortable">Ultima attività <span class="sort-icon">⇅</span></th>
+                    </tr>
+                </thead>
+                <tbody id="connections-table-body">
+                    <tr>
+                        <td colspan="8" style="text-align: center; color: #94a3b8;">Caricamento dati...</td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
     </div>
 
-    <!-- INTESTAZIONE SEZIONE COMUNICAZIONI ATTIVE -->
-    <div class="section-header">
-        <h2>Comunicazioni Attive</h2>
-        <button id="toggle-dashboard-btn" class="accordion-btn" title="Nascondi/Mostra Connessioni">
-            <span class="btn-text">Nascondi</span>
-            <span class="btn-icon">▲</span>
-        </button>
-    </div>
-
-    <!-- BARRA DI RICERCA E FILTRI DINAMICI -->
-    <div class="search-filter-bar">
-        <div class="search-box">
-            <input 
-                type="text" 
-                id="domainSearchInput" 
-                placeholder="🔍 Cerca dominio (es. youtube, google, x)..."
-                autocomplete="off"
-            />
-        </div>
-
-        <div class="filter-dropdowns">
-            <select id="countrySelect">
-                <option value="">Tutte le Nazioni</option>
-            </select>
-
-            <select id="serviceSelect">
-                <option value="">Tutti i Servizi/Porte</option>
-            </select>
-
-            <button id="resetFiltersBtn" class="btn-reset">Reset Filtri</button>
-        </div>
-    </div>
-
-    <!-- CONTENITORE DASHBOARD -->
-    <div id="dashboard"></div>
-
-    <!-- OVERLAY SFONDO SCURO SIDEBAR -->
+    <!-- SIDEBAR IMPOSTAZIONI ED OVERLAY -->
     <div id="sidebar-overlay" class="overlay"></div>
-
-    <!-- SIDEBAR IMPOSTAZIONI -->
     <aside id="settings-sidebar" class="sidebar">
         <div class="sidebar-header">
             <h3>Impostazioni</h3>
@@ -122,17 +195,17 @@
         </div>
     </aside>
 
-    <!-- DIPENDENZE ESTERNE -->
+    <!-- DIPENDENZE ED ESECUZIONE MODULI CLIENT -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="/socket.io/socket.io.js"></script>
 
-    <!-- MODULI APPLICATIVI CLIENT -->
     <script src="scripts/mapManager.js"></script>
     <script src="scripts/filterManager.js"></script>
     <script src="scripts/bandwidthChart.js"></script>
     <script src="scripts/uiManager.js"></script>
     <script src="scripts/settings.js"></script>
     <script src="scripts/dashboard.js"></script>
+    <script src="scripts/analytics.js"></script>
 </body>
 </html>

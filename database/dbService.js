@@ -2,24 +2,17 @@
  * ================================================================================
  * MODULO GESTIONE DATABASE SQLITE (database/dbService.js)
  * ================================================================================
- * Gestisce l'inizializzazione del database SQLite locale e le query per la 
- * persistenza dello storico delle sessioni di rete e i dati analitici.
- * ================================================================================
  */
 
 const Database = require('better-sqlite3');
 const path = require('path');
 
-// Percorso del file SQLite all'interno della cartella database
 const dbPath = path.join(__dirname, 'network_analyzer.db');
 const db = new Database(dbPath);
 
-// Abilita la modalità WAL (Write-Ahead Logging) per prestazioni di scrittura elevate
 db.pragma('journal_mode = WAL');
 
-// ================================================================================
-// CREAZIONE TABELLA SESSIONS (Se non esiste)
-// ================================================================================
+// CREAZIONE TABELLA SESSIONS
 const initQuery = `
 CREATE TABLE IF NOT EXISTS sessions (
     session_id TEXT PRIMARY KEY,
@@ -40,6 +33,14 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 db.exec(initQuery);
 
+// === RIPRISTINO STATO ALL'AVVIO ===
+// Tutte le sessioni rimaste 'active' o 'idle' da un'esecuzione precedente vengono segnate come 'closed'
+const resetStmt = db.prepare("UPDATE sessions SET status = 'closed' WHERE status IN ('active', 'idle')");
+const result = resetStmt.run();
+if (result.changes > 0) {
+    console.log(`[DATABASE] Ripristinato stato 'closed' per ${result.changes} vecchie sessioni (active/idle).`);
+}
+
 console.log('[DATABASE] SQLite connesso e tabella "sessions" verificata.');
 
 /**
@@ -54,11 +55,11 @@ function upsertSession(sessionData) {
         ) VALUES (
             @sessionId, @remoteIp, @remotePort, @hostName, @resourceName,
             @technicalSubtitle, @provider, @country, @service, @totalBytes,
-            @time, @time, 'active'
+            @formattedTime, @formattedTime, 'active'
         )
         ON CONFLICT(session_id) DO UPDATE SET
             total_bytes = @totalBytes,
-            last_seen = @time,
+            last_seen = @formattedTime,
             resource_name = CASE 
                 WHEN excluded.resource_name != 'Risorsa Web' AND excluded.resource_name != '' 
                 THEN excluded.resource_name 
@@ -74,15 +75,25 @@ function upsertSession(sessionData) {
 }
 
 /**
- * Aggiorna lo stato di una sessione (es. 'closed' o 'idle')
+ * Aggiorna lo stato di una singola sessione (es. 'closed' o 'idle')
  */
 function updateSessionStatus(sessionId, status) {
     const stmt = db.prepare('UPDATE sessions SET status = ? WHERE session_id = ?');
     stmt.run(status, sessionId);
 }
 
+/**
+ * Chiude tutte le sessioni aperte (active e idle) al momento dello spegnimento dell'app
+ */
+function closeAllActiveSessions() {
+    const stmt = db.prepare("UPDATE sessions SET status = 'closed' WHERE status IN ('active', 'idle')");
+    const res = stmt.run();
+    console.log(`[DATABASE] Tutte le sessioni attive e idle sono state segnate come "closed" (${res.changes} sessioni aggiornate).`);
+}
+
 module.exports = {
     db,
     upsertSession,
-    updateSessionStatus
+    updateSessionStatus,
+    closeAllActiveSessions
 };
