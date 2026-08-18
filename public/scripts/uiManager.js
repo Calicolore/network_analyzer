@@ -2,110 +2,194 @@
  * ================================================================================
  * GESTORE DELL'INTERFACCIA UTENTE E SCHEDE DI SESSIONE (uiManager.js)
  * ================================================================================
- * Questo modulo gestisce la creazione, l'aggiornamento dinamico, l'ordinamento
- * e la rimozione delle schede di sessione (card) nella dashboard.
- * ================================================================================
  */
 
-// ================================================================================
-// PASSO 1: INIZIALIZZAZIONE ELEMENTI DOM E VARIABILI DI STATO
-// ================================================================================
 const dashboard = document.getElementById('dashboard');
 let sortThrottleTimeout = null;
 
 // ================================================================================
-// PASSO 2: ORDINAMENTO THROTTLED DELLE CARD PER CONSUMO DI BANDA
+// PASSO 1: BUFFERING DEI PACCHETTI IN INGRESSO
 // ================================================================================
-function sortCardsByUsage() {
-    if (sortThrottleTimeout) return;
+const packetBuffer = [];
+const FLUSH_INTERVAL_MS = 100; // Processa i pacchetti ogni 100ms
 
-    // Esegue il riordinamento DOM a intervalli controllati (1000ms)
-    // per evitare Continuous Layout Reflow durante il flusso intenso di pacchetti
-    sortThrottleTimeout = setTimeout(() => {
-        const cards = Array.from(dashboard.querySelectorAll('.session-card'));
-        if (cards.length < 2) {
-            sortThrottleTimeout = null;
-            return;
+/**
+ * Funzione invocata all'arrivo di ogni pacchetto WebSocket.
+ * Gestisce sia pacchetti singoli che array (batch) srotolandoli nel buffer.
+ */
+function renderPacketCard(data) {
+    if (!data) return;
+    if (Array.isArray(data)) {
+        packetBuffer.push(...data);
+    } else {
+        packetBuffer.push(data);
+    }
+}
+
+// Avvio il loop periodico di flush del buffer
+setInterval(flushPacketBuffer, FLUSH_INTERVAL_MS);
+
+/**
+ * Elabora tutti i pacchetti accumulati nel buffer in un unico blocco.
+ */
+function flushPacketBuffer() {
+    if (packetBuffer.length === 0) return;
+
+    const targetDashboard = dashboard || document.getElementById('dashboard');
+    if (!targetDashboard) return;
+
+    // Svuota il buffer e prende tutti gli elementi accumulati
+    const rawPackets = packetBuffer.splice(0, packetBuffer.length);
+
+    // Garantisce che tutti gli elementi siano pacchetti singoli validi
+    const packetsToProcess = [];
+    for (const item of rawPackets) {
+        if (Array.isArray(item)) {
+            packetsToProcess.push(...item);
+        } else if (item && typeof item === 'object') {
+            packetsToProcess.push(item);
+        }
+    }
+
+    // Raggruppa i pacchetti per sessionId per minimizzare le operazioni DOM per ogni card
+    const groupedPackets = new Map();
+    for (const packet of packetsToProcess) {
+        if (!packet || !packet.sessionId) continue;
+
+        if (!groupedPackets.has(packet.sessionId)) {
+            groupedPackets.set(packet.sessionId, []);
+        }
+        groupedPackets.get(packet.sessionId).push(packet);
+    }
+
+    if (groupedPackets.size === 0) return;
+
+    const newCardsFragment = document.createDocumentFragment();
+
+    groupedPackets.forEach((packets, sessionId) => {
+        const lastPacket = packets[packets.length - 1];
+        let sessionDiv = document.getElementById(sessionId);
+
+        // --- CREAZIONE CARD (se non esiste) ---
+        if (!sessionDiv) {
+            sessionDiv = createCardNode(lastPacket);
+            newCardsFragment.appendChild(sessionDiv);
+        } else {
+            sessionDiv.classList.remove('closed-card', 'idle-card');
         }
 
-        // Verifica se l'ordine attuale è cambiato prima di toccare il DOM
-        let needsReorder = false;
-        for (let i = 0; i < cards.length - 1; i++) {
-            const kbA = parseFloat(cards[i].getAttribute('data-kb') || 0);
-            const kbB = parseFloat(cards[i + 1].getAttribute('data-kb') || 0);
-            if (kbA < kbB) {
-                needsReorder = true;
-                break;
+        // --- AGGIORNAMENTO TESTATA E BANDA ---
+        updateCardHeader(sessionDiv, lastPacket);
+
+        // --- INSERIMENTO RIGHE PACCHETTI IN BATCH ---
+        const container = sessionDiv._containerEl;
+        const linesFragment = document.createDocumentFragment();
+
+        for (const pData of packets) {
+            const p = document.createElement('div');
+            p.className = 'packet-line';
+            const directionCol = pData.direction === "-->" ? "#ef4444" : "#22c55e";
+            const serviceDisplay = (pData.service || '').startsWith('Port:') 
+                ? pData.service 
+                : `Port: ${pData.remotePort} - ${pData.service || 'Unknown'}`;
+
+            p.innerHTML = `
+                <span style="color:#64748b; font-size: 0.85em;">${pData.time || ''}</span>
+                <span style="color:${directionCol}; font-weight: bold; margin: 0 5px;">${pData.direction || '-->'}</span>
+                <span class="flags" style="color:#94a3b8; font-size: 0.8em; margin-right: 5px;">[${pData.flags || ''}]</span>
+                <span style="color:#38bdf8; font-weight:bold;">${serviceDisplay}</span>
+            `;
+            linesFragment.appendChild(p);
+
+            // --- AGGIORNAMENTO MAPPA E GRAFICI PER SINGOLO PACCHETTO ---
+            if (window.MapManager && typeof window.MapManager.addConnection === 'function') {
+                window.MapManager.addConnection(pData);
+            } else if (window.mapManager && typeof window.mapManager.addConnection === 'function') {
+                window.mapManager.addConnection(pData);
+            }
+
+            if (window.ChartManager && typeof window.ChartManager.update === 'function') {
+                window.ChartManager.update(pData);
+            } else if (window.chartManager && typeof window.chartManager.update === 'function') {
+                window.chartManager.update(pData);
             }
         }
 
-        // Sposta i nodi DOM solo se l'ordinamento è effettivamente variato
-        if (needsReorder) {
-            cards.sort((a, b) => {
-                return parseFloat(b.getAttribute('data-kb') || 0) - parseFloat(a.getAttribute('data-kb') || 0);
-            });
-            cards.forEach(card => dashboard.appendChild(card));
-        }
+        container.appendChild(linesFragment);
 
-        sortThrottleTimeout = null;
-    }, 1000);
+        // Mantieni massimo 100 righe per contenitore
+        while (container.children.length > 100) {
+            container.removeChild(container.firstChild);
+        }
+        container.scrollTop = container.scrollHeight;
+
+        // --- AGGIORNAMENTO DATASET PER FILTRI ---
+        sessionDiv.dataset.domain = (lastPacket.resourceName || '').toLowerCase();
+        sessionDiv.dataset.ip = (lastPacket.remoteIp || '').toLowerCase();
+        sessionDiv.dataset.country = (lastPacket.country || '').toLowerCase();
+        sessionDiv.dataset.provider = (lastPacket.provider || '').toLowerCase();
+        sessionDiv.dataset.service = (lastPacket.service || '').toUpperCase();
+
+        const isClosedOrIdle = sessionDiv.classList.contains('closed-card') || sessionDiv.classList.contains('idle-card');
+        sessionDiv.dataset.closed = isClosedOrIdle ? 'true' : 'false';
+
+        if (window.FilterManager) {
+            window.FilterManager.evaluateNewCard(sessionDiv);
+        }
+    });
+
+    // Se ci sono nuove card create nel ciclo, vengono appese in un unico colpo al DOM
+    if (newCardsFragment.children.length > 0) {
+        targetDashboard.appendChild(newCardsFragment);
+    }
+
+    sortCardsByUsage();
 }
 
 // ================================================================================
-// PASSO 3: GENERAZIONE E AGGIORNAMENTO DELLE CARD
+// HELPER PER CREAZIONE ED AGGIORNAMENTO NODO CARD
 // ================================================================================
-function renderPacketCard(data) {
-    let sessionDiv = document.getElementById(data.sessionId);
-    
-    // ================================================================================
-    // FASE 1: CREAZIONE NUOVA CARD (SE NON ESISTE) E CACHING ELEMENTI DOM
-    // ================================================================================
-    if (!sessionDiv) {
-        sessionDiv = document.createElement('div');
-        sessionDiv.id = data.sessionId;
-        sessionDiv.className = 'session-card';
-        
-        if (typeof currentlyHighlightedSessionId !== 'undefined' && currentlyHighlightedSessionId && currentlyHighlightedSessionId !== data.sessionId) {
-            sessionDiv.classList.add('dimmed-card');
-        }
-        
-        const countryBadge = `<span style="background:#334155; padding:2px 6px; border-radius:4px; font-size:0.7em; margin-left:8px;">${data.country}</span>`;
-        
-        sessionDiv.innerHTML = `
-            <div class="session-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
-                <div style="display: flex; flex-direction: column; gap: 4px;">
-                    <div class="res-title" 
-                        style="color: #38bdf8; font-size: 1.1em; font-weight: bold; word-break: break-all;"
-                        title="Clicca sulla card per evidenziare la rotta sulla mappa">
-                        ${data.resourceName}
-                    </div>
-                    <div class="subtitle-container"></div>
-                    <div style="color: #64748b; font-size: 0.75em; font-family: monospace;">
-                        IP: ${data.remoteIp} ${countryBadge}
-                    </div>
-                </div>
-                <div class="bandwidth-meter" style="text-align: right; color: #10b981; font-weight: bold; font-family: monospace; font-size: 0.9em; min-width: 110px;">
-                    ${data.totalKB} KB Tot.
-                </div>
-            </div>
-            <div class="packets-container" style="height: 150px; overflow-y: auto; margin: 10px 0; border-top: 1px solid #334155; padding-top: 5px; font-size: 0.85em;"></div>
-        `;
-        dashboard.appendChild(sessionDiv);
+function createCardNode(data) {
+    const sessionDiv = document.createElement('div');
+    sessionDiv.id = data.sessionId;
+    sessionDiv.className = 'session-card';
 
-        // Caching dei riferimenti ai nodi interni per evitare querySelector ripetuti ad ogni pacchetto
-        sessionDiv._titleDiv = sessionDiv.querySelector('.res-title');
-        sessionDiv._subContainer = sessionDiv.querySelector('.subtitle-container');
-        sessionDiv._meterEl = sessionDiv.querySelector('.bandwidth-meter');
-        sessionDiv._containerEl = sessionDiv.querySelector('.packets-container');
-    } else {
-        // Se arrivano nuovi pacchetti, la sessione torna attiva
-        sessionDiv.classList.remove('closed-card');
-        sessionDiv.classList.remove('idle-card');
+    if (typeof currentlyHighlightedSessionId !== 'undefined' && currentlyHighlightedSessionId && currentlyHighlightedSessionId !== data.sessionId) {
+        sessionDiv.classList.add('dimmed-card');
     }
 
-    // ================================================================================
-    // FASE 2: OTTIMIZZAZIONE E AGGIORNAMENTO TITOLO E SOTTOTITOLO
-    // ================================================================================
+    const countryBadge = `<span style="background:#334155; padding:2px 6px; border-radius:4px; font-size:0.7em; margin-left:8px;">${data.country || 'N/A'}</span>`;
+
+    sessionDiv.innerHTML = `
+        <div class="session-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div class="res-title" 
+                    style="color: #38bdf8; font-size: 1.1em; font-weight: bold; word-break: break-all;"
+                    title="Clicca sulla card per evidenziare la rotta sulla mappa">
+                    ${data.resourceName || data.remoteIp}
+                </div>
+                <div class="subtitle-container"></div>
+                <div style="color: #64748b; font-size: 0.75em; font-family: monospace;">
+                    IP: ${data.remoteIp} ${countryBadge}
+                </div>
+            </div>
+            <div class="bandwidth-meter" style="text-align: right; color: #10b981; font-weight: bold; font-family: monospace; font-size: 0.9em; min-width: 110px;">
+                ${data.totalKB || 0} KB Tot.
+            </div>
+        </div>
+        <div class="packets-container" style="height: 150px; overflow-y: auto; margin: 10px 0; border-top: 1px solid #334155; padding-top: 5px; font-size: 0.85em;"></div>
+    `;
+
+    // Caching riferimenti
+    sessionDiv._titleDiv = sessionDiv.querySelector('.res-title');
+    sessionDiv._subContainer = sessionDiv.querySelector('.subtitle-container');
+    sessionDiv._meterEl = sessionDiv.querySelector('.bandwidth-meter');
+    sessionDiv._containerEl = sessionDiv.querySelector('.packets-container');
+
+    return sessionDiv;
+}
+
+function updateCardHeader(sessionDiv, data) {
     const titleDiv = sessionDiv._titleDiv;
     const subContainer = sessionDiv._subContainer;
 
@@ -129,7 +213,6 @@ function renderPacketCard(data) {
 
     if (subContainer) {
         const currentTitle = titleDiv ? titleDiv.textContent.trim() : '';
-        
         const getBaseDomain = (dom) => {
             if (!dom) return '';
             const parts = dom.toLowerCase().split('.');
@@ -146,73 +229,69 @@ function renderPacketCard(data) {
         }
     }
 
-    // ================================================================================
-    // FASE 3: AGGIORNAMENTO METER BANDA E ATTRIBUTI DATI
-    // ================================================================================
-    sessionDiv.setAttribute('data-kb', data.totalKB);
+    sessionDiv.setAttribute('data-kb', data.totalKB || 0);
     if (sessionDiv._meterEl) {
-        sessionDiv._meterEl.innerText = `${data.totalKB} KB Tot.`;
+        sessionDiv._meterEl.innerText = `${data.totalKB || 0} KB Tot.`;
     }
-
-    // ================================================================================
-    // FASE 4: INSERIMENTO RIGA PACCHETTO NEL CONTENITORE
-    // ================================================================================
-    const container = sessionDiv._containerEl;
-    const directionCol = data.direction === "-->" ? "#ef4444" : "#22c55e";
-    const serviceDisplay = data.service.startsWith('Port:') ? data.service : `Port: ${data.remotePort} - ${data.service}`;
-
-    const p = document.createElement('div');
-    p.className = 'packet-line';
-    p.innerHTML = `
-        <span style="color:#64748b; font-size: 0.85em;">${data.time}</span>
-        <span style="color:${directionCol}; font-weight: bold; margin: 0 5px;">${data.direction}</span>
-        <span class="flags" style="color:#94a3b8; font-size: 0.8em; margin-right: 5px;">[${data.flags}]</span>
-        <span style="color:#38bdf8; font-weight:bold;">${serviceDisplay}</span>
-    `;
-    
-    container.appendChild(p);
-
-    if (container.children.length > 100) {
-        container.removeChild(container.firstChild);
-    }
-    
-    // Auto-scroll del contenitore pacchetti
-    container.scrollTop = container.scrollHeight;
-
-    // ================================================================================
-    // FASE 5: AGGIORNAMENTO DATASET PER FILTRI E VALUTAZIONE
-    // ================================================================================
-    sessionDiv.dataset.domain = (data.resourceName || '').toLowerCase();
-    sessionDiv.dataset.ip = (data.remoteIp || '').toLowerCase();
-    sessionDiv.dataset.country = (data.country || '').toLowerCase();
-    sessionDiv.dataset.provider = (data.provider || '').toLowerCase();
-    sessionDiv.dataset.service = (data.service || '').toUpperCase();
-    
-    // Considera chiusa sia la connessione FIN/RST che quella in Timeout
-    const isClosedOrIdle = sessionDiv.classList.contains('closed-card') || sessionDiv.classList.contains('idle-card');
-    sessionDiv.dataset.closed = isClosedOrIdle ? 'true' : 'false';
-
-    if (window.FilterManager) {
-        window.FilterManager.evaluateNewCard(sessionDiv);
-    }
-
-    // Trigger del riordinamento ottimizzato
-    sortCardsByUsage();
 }
 
 // ================================================================================
-// PASSO 4: RIMOZIONE CARD DALLA DASHBOARD
+// ORDINAMENTO CARD ED ELIMINAZIONE
 // ================================================================================
+function sortCardsByUsage() {
+    if (sortThrottleTimeout) return;
+
+    sortThrottleTimeout = setTimeout(() => {
+        const targetDashboard = dashboard || document.getElementById('dashboard');
+        if (!targetDashboard) {
+            sortThrottleTimeout = null;
+            return;
+        }
+
+        const cards = Array.from(targetDashboard.querySelectorAll('.session-card'));
+        if (cards.length < 2) {
+            sortThrottleTimeout = null;
+            return;
+        }
+
+        let needsReorder = false;
+        for (let i = 0; i < cards.length - 1; i++) {
+            const kbA = parseFloat(cards[i].getAttribute('data-kb') || 0);
+            const kbB = parseFloat(cards[i + 1].getAttribute('data-kb') || 0);
+            if (kbA < kbB) {
+                needsReorder = true;
+                break;
+            }
+        }
+
+        if (needsReorder) {
+            cards.sort((a, b) => parseFloat(b.getAttribute('data-kb') || 0) - parseFloat(a.getAttribute('data-kb') || 0));
+            cards.forEach(card => targetDashboard.appendChild(card));
+        }
+
+        sortThrottleTimeout = null;
+    }, 1000);
+}
+
 function removeSessionCard(sessionId) {
     const sessionDiv = document.getElementById(sessionId);
+    if (sessionDiv) sessionDiv.remove();
+}
+
+function markSessionClosed(sessionId, reason) {
+    const sessionDiv = document.getElementById(sessionId);
     if (sessionDiv) {
-        sessionDiv.remove();
+        if (reason === 'Idle Timeout') {
+            sessionDiv.classList.add('dimmed-card');
+        } else {
+            sessionDiv.classList.add('closed-card');
+        }
+        sessionDiv.dataset.closed = 'true';
+        if (window.FilterManager) window.FilterManager.evaluateNewCard(sessionDiv);
     }
 }
 
-// ================================================================================
-// PASSO 5: EVENT LISTENER TENDINA ED EVENTI CLICK SULLE CARD
-// ================================================================================
+// Event Listeners DOM
 document.addEventListener('DOMContentLoaded', () => {
     const toggleDashboardBtn = document.getElementById('toggle-dashboard-btn');
     const dashboardContainer = document.getElementById('dashboard');
@@ -223,51 +302,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
         toggleDashboardBtn.addEventListener('click', () => {
             const isCollapsed = dashboardContainer.classList.toggle('collapsed');
-
-            if (isCollapsed) {
-                if (btnText) btnText.textContent = 'Mostra';
-                if (btnIcon) btnIcon.textContent = '▼';
-            } else {
-                if (btnText) btnText.textContent = 'Nascondi';
-                if (btnIcon) btnIcon.textContent = '▲';
-            }
+            if (btnText) btnText.textContent = isCollapsed ? 'Mostra' : 'Nascondi';
+            if (btnIcon) btnIcon.textContent = isCollapsed ? '▼' : '▲';
         });
     }
 
     if (dashboardContainer) {
         dashboardContainer.addEventListener('click', (e) => {
             const card = e.target.closest('.session-card');
-            if (!card) return;
-
-            if (window.getSelection().toString().length > 0) return;
-
-            const sessionId = card.id;
+            if (!card || window.getSelection().toString().length > 0) return;
             if (typeof window.focusLastHop === 'function') {
-                window.focusLastHop(sessionId);
+                window.focusLastHop(card.id);
             }
         });
     }
 });
-
-// ================================================================================
-// PASSO 6: MARCATURA CHIUSURA SESSIONE 
-// ================================================================================
-function markSessionClosed(sessionId, reason) {
-    const sessionDiv = document.getElementById(sessionId);
-    if (sessionDiv) {
-        
-        if (reason === 'Idle Timeout') {
-            // Se è chiusa per inattività -> diventa GRIGIA / OPACA
-            sessionDiv.classList.add('dimmed-card');
-        } else {
-            // Se è chiusa normalmente (FIN/RST) -> diventa ROSSA
-            sessionDiv.classList.add('closed-card');
-        }
-        
-        sessionDiv.dataset.closed = 'true';
-        
-        if (window.FilterManager) {
-            window.FilterManager.evaluateNewCard(sessionDiv);
-        }
-    }
-}

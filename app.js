@@ -4,7 +4,8 @@
  * ================================================================================
  * Questo modulo costituisce il core dell'applicazione backend. Gestisce l'inizializzazione
  * delle variabili d'ambiente, avvia il server Web e Socket.IO, configura lo sniffer di rete,
- * elabora i pacchetti catturati e distribuisce i dati al client via WebSocket in tempo reale.
+ * elabora i pacchetti catturati, li accumula in un buffer e distribuisce i dati al client
+ * via WebSocket a intervalli regolari (batch).
  * ================================================================================
  */
 
@@ -48,12 +49,25 @@ function getFullFormattedDateTime(rawTime) {
 }
 
 // ================================================================================
-// PASSO 3: INIZIALIZZAZIONE MAPPE DI STATO E SESSIONI
+// PASSO 3: INIZIALIZZAZIONE MAPPE DI STATO, SESSIONI E BUFFER WEBSOCKET
 // ================================================================================
 const sessionColors = new Map();        // Traccia il colore univoco associato a ciascuna sessione (IP:Porta)
 const sessionTotalBytes = new Map();    // Traccia il volume di traffico accumulato in byte per ciascuna sessione
 const sessionLastSeen = new Map();      // Traccia l'ultimo timestamp (ms) di attività della sessione
 const sessionResourceNames = new Map(); // Traccia il nome della risorsa assegnata alla sessione
+
+// Buffer backend per l'emissione in batch verso il client
+const packetBuffer = [];
+const FLUSH_INTERVAL_MS = 100; // Invia i pacchetti accumulati ogni 100ms
+
+setInterval(() => {
+    if (packetBuffer.length > 0) {
+        const batch = packetBuffer.splice(0, packetBuffer.length);
+        io.emit('new_packet_batch', batch);
+        // Retrocompatibilità per eventuali listener client che ascoltano eventi singoli
+        batch.forEach(pkt => io.emit('new_packet', pkt));
+    }
+}, FLUSH_INTERVAL_MS);
 
 // ================================================================================
 // PASSO 4: INIZIALIZZAZIONE DELLO SNIFFER DI RETE ED ELABORAZIONE PACCHETTI
@@ -154,9 +168,9 @@ initSniffer(myIp, async (packet) => {
     };
 
     // ================================================================================
-    // FASE 11: EMISSIONE WEBSOCKET IMMEDIATA E SALVATAGGIO DATABASE
+    // FASE 11: INSERIMENTO NEL BUFFER WEBSOCKET E SALVATAGGIO DATABASE
     // ================================================================================
-    io.emit('new_packet', packetData);
+    packetBuffer.push(packetData);
 
     // Salvataggio / Aggiornamento in tempo reale nel Database SQLite
     upsertSession({
