@@ -70,7 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 
                 updateSortIcons();
-                applyFiltersAndRender();
+                applyFiltersAndRender(true); // Forziamo l'aggiornamento grafico al cambio ordinamento
             });
         });
     }
@@ -101,7 +101,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             populateDropdowns(allSessions);
             updateSortIcons();
-            applyFiltersAndRender();
+            applyFiltersAndRender(true); // Forziamo aggiornamento iniziale grafico
         } catch (error) {
             console.error('Errore:', error);
             if (tableBody) {
@@ -139,23 +139,20 @@ document.addEventListener('DOMContentLoaded', () => {
         selectElement.value = currentVal;
     }
 
-    // === 6. AGGIORNAMENTO REATTIVO TRAMITE WEBSOCKET (LIVE + FIN/RST) ===
+    // === 6. WEBSOCKET E REQUISITO 1: THROTTLING GRAFICO OGNI 10 SECONDI ===
     let renderScheduled = false;
+    let lastChartUpdateTime = 0;
+    const CHART_THROTTLE_MS = 10000; // 10 secondi
 
     function scheduleRender() {
         if (renderScheduled) return;
-        renderScheduled = true;
+        renderScheduled = false; // Permettiamo chiamate immediate per la tabella
         
-        setTimeout(() => {
-            renderScheduled = false;
-            // Esegue il re-render solo se la scheda Analytics è visible per ottimizzare le prestazioni
-            if (viewAnalytics && !viewAnalytics.classList.contains('hidden')) {
-                applyFiltersAndRender();
-            }
-        }, 1000); // Throttle di 1 secondo
+        if (viewAnalytics && !viewAnalytics.classList.contains('hidden')) {
+            applyFiltersAndRender(false); // false = non forza l'aggiornamento immediato del grafico
+        }
     }
 
-    // Aggiornamento pacchetti in tempo reale
     socket.on('new_packet', (packetData) => {
         const existing = allSessions.find(s => s.session_id === packetData.sessionId);
         const calculatedBytes = Math.round(parseFloat(packetData.totalKB || 0) * 1024) || packetData.size || 0;
@@ -190,7 +187,6 @@ document.addEventListener('DOMContentLoaded', () => {
         scheduleRender();
     });
 
-    // Aggiornamento su FIN / RST / Idle Timeout
     socket.on('session_closed', (data) => {
         const existing = allSessions.find(s => s.session_id === data.sessionId);
         if (existing) {
@@ -207,7 +203,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function setFilter(key, value) {
         activeFilters[key] = value;
-        applyFiltersAndRender();
+        applyFiltersAndRender(true); // Forziamo l'aggiornamento grafico immediato sull'azione dell'utente
     }
 
     function removeFilter(key) {
@@ -216,12 +212,48 @@ document.addEventListener('DOMContentLoaded', () => {
         if (key === 'service' && selectService) selectService.value = '';
         if (key === 'provider' && selectProvider) selectProvider.value = '';
         if (key === 'status' && selectStatus) selectStatus.value = '';
-        applyFiltersAndRender();
+        applyFiltersAndRender(true); // Forziamo l'aggiornamento grafico immediato
     }
 
-    // === 8. FILTRAGGIO, ORDINAMENTO E RENDERING TABELLA ===
-    function applyFiltersAndRender() {
+    // === REQUISITO 3: DISABILITA OPZIONE GRAFICO SE FILTRO ATTIVO ===
+    function updateChartDropdownOptions() {
+        const paramSelect = document.getElementById('paramSelect');
+        if (!paramSelect) return;
+
+        let currentVal = paramSelect.value;
+        let selectedOptionDisabled = false;
+
+        Array.from(paramSelect.options).forEach(option => {
+            const val = option.value;
+            // Verifica se per questo parametro esiste un filtro attivo
+            const isFiltered = Boolean(activeFilters[val]);
+
+            if (isFiltered) {
+                option.disabled = true;
+                option.textContent = `${getCategoryLabel(val)} (Filtro attivo)`;
+                if (val === currentVal) {
+                    selectedOptionDisabled = true;
+                }
+            } else {
+                option.disabled = false;
+                option.textContent = getCategoryLabel(val);
+            }
+        });
+
+        // Se l'opzione correntemente vista nel grafico è stata disabilitata dal filtro, cambia automaticamente
+        if (selectedOptionDisabled) {
+            const firstAvailable = Array.from(paramSelect.options).find(opt => !opt.disabled);
+            if (firstAvailable) {
+                paramSelect.value = firstAvailable.value;
+                paramSelect.dispatchEvent(new Event('change'));
+            }
+        }
+    }
+
+    // === 8. FILTRAGGIO, ORDINAMENTO E RENDERING TABELLA & STATS ===
+    function applyFiltersAndRender(forceChartUpdate = false) {
         renderFilterChips();
+        updateChartDropdownOptions(); // Aggiorna le voci disabilitate del menu del grafico
 
         let result = allSessions.filter(session => {
             if (activeFilters.country && session.country !== activeFilters.country) return false;
@@ -247,6 +279,17 @@ document.addEventListener('DOMContentLoaded', () => {
             if (valA > valB) return currentSortOrder === 'asc' ? 1 : -1;
             return 0;
         });
+
+        window.filteredConnections = result;
+
+        // Gestione aggiornamento grafico con Throttle di 10 secondi
+        const now = Date.now();
+        if (forceChartUpdate || (now - lastChartUpdateTime >= CHART_THROTTLE_MS)) {
+            if (typeof updateAnalyticsDashboard === 'function') {
+                updateAnalyticsDashboard(result, allSessions);
+                lastChartUpdateTime = now;
+            }
+        }
 
         renderTable(result);
     }

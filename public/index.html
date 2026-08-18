@@ -111,7 +111,44 @@
     <!-- =================================================================== -->
     <div id="view-analytics" class="spa-view hidden" style="margin-top: 20px;">
         
-        <!-- SEZIONE FILTRI DINAMICI -->
+        <!-- 1. BLOCCO STATISTICHE KPI -->
+        <div class="kpi-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 20px;">
+            <div class="kpi-card" style="background: #1e293b; padding: 15px; border-radius: 8px; border: 1px solid #334155;">
+                <span style="font-size: 0.85em; color: #94a3b8; display: block; font-weight: bold;">Connessioni</span>
+                <span id="kpi-connections" style="font-size: 1.6em; font-weight: bold; color: #38bdf8; display: block; margin-top: 5px;">0 / 0</span>
+                <span id="kpi-percentage" style="font-size: 0.8em; color: #64748b; display: block; margin-top: 4px;">(0% del totale)</span>
+            </div>
+            <div class="kpi-card" style="background: #1e293b; padding: 15px; border-radius: 8px; border: 1px solid #334155;">
+                <span style="font-size: 0.85em; color: #94a3b8; display: block; font-weight: bold;">Traffico</span>
+                <span id="kpi-bandwidth" style="font-size: 1.6em; font-weight: bold; color: #10b981; display: block; margin-top: 5px;">0 KB</span>
+                <span id="kpi-bandwidth-subtext" style="font-size: 0.8em; color: #64748b; display: block; margin-top: 4px;">0 B totali nel DB</span>
+            </div>
+            <div class="kpi-card" style="background: #1e293b; padding: 15px; border-radius: 8px; border: 1px solid #334155;">
+                <span style="font-size: 0.85em; color: #94a3b8; display: block; font-weight: bold;">Nazioni</span>
+                <span id="kpi-countries" style="font-size: 1.6em; font-weight: bold; color: #a855f7; display: block; margin-top: 5px;">0</span>
+                <span style="font-size: 0.8em; color: #64748b; display: block; margin-top: 4px;">nel subset filtrato</span>
+            </div>
+        </div>
+
+        <!-- 2. BLOCCO GRAFICO DINAMICO -->
+        <div class="chart-section" style="background: #1e293b; padding: 20px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+                <h3 style="margin: 0; color: #f8fafc; font-size: 1.1em;">📊 Analisi Ripartizione</h3>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <label for="paramSelect" style="color: #94a3b8; font-size: 0.9em; font-weight: bold;">Raggruppa per:</label>
+                    <select id="paramSelect" style="background: #0f172a; color: white; border: 1px solid #334155; padding: 6px 12px; border-radius: 6px; font-size: 0.9em; cursor: pointer;">
+                        <option value="country">Nazione</option>
+                        <option value="service">Servizio / Porta</option>
+                        <option value="provider">Provider Cloud</option>
+                    </select>
+                </div>
+            </div>
+            <div style="height: 260px; position: relative; width: 100%; display: flex; justify-content: center;">
+                <canvas id="analyticsPieChart"></canvas>
+            </div>
+        </div>
+
+        <!-- 3. SEZIONE FILTRI DINAMICI -->
         <div class="filter-section">
             <h3>🔍 Selezione Filtri Database</h3>
             <p style="color: #94a3b8; font-size: 0.9em; margin-bottom: 10px;">
@@ -147,7 +184,7 @@
             </div>
         </div>
 
-        <!-- TABELLA RISULTATI CON ORDINAMENTO COLONNE -->
+        <!-- 4. TABELLA RISULTATI -->
         <div class="results-container">
             <table>
                 <thead>
@@ -206,6 +243,7 @@
     <script src="scripts/uiManager.js"></script>
     <script src="scripts/settings.js"></script>
     <script src="scripts/dashboard.js"></script>
+    <script src="scripts/analyticsChart.js"></script>
     <script src="scripts/analytics.js"></script>
 </body>
 </html>
