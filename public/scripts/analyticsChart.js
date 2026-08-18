@@ -1,6 +1,6 @@
 /**
  * analyticsChart.js
- * Gestione dei contatori KPI e del grafico a torta dinamico per la pagina Analytics.
+ * Gestione dei contatori KPI e del grafico a torta dinamico ad alte prestazioni.
  */
 
 let analyticsPieChart = null;
@@ -60,7 +60,7 @@ function updateAnalyticsDashboard(filteredData = [], totalData = []) {
 }
 
 /**
- * Disegna o aggiorna il grafico a torta accorpando le fette minime in "Altro"
+ * Disegna o aggiorna in-place il grafico a torta
  */
 function renderAnalyticsChart(data = []) {
     const canvas = document.getElementById('analyticsPieChart');
@@ -85,7 +85,7 @@ function renderAnalyticsChart(data = []) {
         rawCounts[val] = (rawCounts[val] || 0) + 1;
     });
 
-    // Soglia percentuale per accorpare in "Altro" (es. meno del 2%)
+    // Soglia percentuale per accorpare in "Altro" (2%)
     const THRESHOLD_PERCENT = 2.0; 
     const counts = {};
     let altroCount = 0;
@@ -106,18 +106,25 @@ function renderAnalyticsChart(data = []) {
     const labels = Object.keys(counts);
     const values = Object.values(counts);
 
-    const ctx = canvas.getContext('2d');
-
-    if (analyticsPieChart) {
-        analyticsPieChart.destroy();
-    }
-
-    // Assegnazione colori dinamica con grigio scuro riservato a "Altro" se presente
     const bgColors = labels.map((label, i) => {
         if (label === 'Altro') return '#64748b';
         return CHART_COLORS[i % (CHART_COLORS.length - 1)];
     });
 
+    // === OTTIMIZZAZIONE PRESTAZIONI ===
+    // Se il grafico esiste già, aggiorna solo i dati ed esegui l'update 'none' (senza animazioni)
+    if (analyticsPieChart) {
+        analyticsPieChart.data.labels = labels;
+        analyticsPieChart.data.datasets[0].data = values;
+        analyticsPieChart.data.datasets[0].backgroundColor = bgColors;
+        
+        // Modalità 'none': azzera il carico CPU evitando il rendering frame-by-frame delle animazioni
+        analyticsPieChart.update('none');
+        return;
+    }
+
+    // Creazione iniziale solo al primo caricamento
+    const ctx = canvas.getContext('2d');
     analyticsPieChart = new Chart(ctx, {
         type: 'pie',
         data: {
@@ -132,6 +139,7 @@ function renderAnalyticsChart(data = []) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            animation: false, // Disabilita animazioni iniziali
             plugins: {
                 tooltip: {
                     callbacks: {

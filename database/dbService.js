@@ -1,6 +1,6 @@
 /**
  * ================================================================================
- * MODULO GESTIONE DATABASE SQLITE (database/dbService.js)
+ * MODULO GESTIONE DATABASE SQLITE CON BUFFERING (database/dbService.js)
  * ================================================================================
  */
 
@@ -34,7 +34,6 @@ CREATE TABLE IF NOT EXISTS sessions (
 db.exec(initQuery);
 
 // === RIPRISTINO STATO ALL'AVVIO ===
-// Tutte le sessioni rimaste 'active' o 'idle' da un'esecuzione precedente vengono segnate come 'closed'
 const resetStmt = db.prepare("UPDATE sessions SET status = 'closed' WHERE status IN ('active', 'idle')");
 const result = resetStmt.run();
 if (result.changes > 0) {
@@ -43,49 +42,93 @@ if (result.changes > 0) {
 
 console.log('[DATABASE] SQLite connesso e tabella "sessions" verificata.');
 
+// === BUFFER DI SCRITTURA ED ESECUZIONE BATCH ===
+const upsertBuffer = new Map();
+const statusBuffer = new Map();
+
+// Prepared Statements compilati una sola volta
+const upsertStmt = db.prepare(`
+    INSERT INTO sessions (
+        session_id, remote_ip, remote_port, host_name, resource_name,
+        technical_subtitle, provider, country, service, total_bytes,
+        first_seen, last_seen, status
+    ) VALUES (
+        @sessionId, @remoteIp, @remotePort, @hostName, @resourceName,
+        @technicalSubtitle, @provider, @country, @service, @totalBytes,
+        @formattedTime, @formattedTime, 'active'
+    )
+    ON CONFLICT(session_id) DO UPDATE SET
+        total_bytes = @totalBytes,
+        last_seen = @formattedTime,
+        resource_name = CASE 
+            WHEN excluded.resource_name != 'Risorsa Web' AND excluded.resource_name != '' 
+            THEN excluded.resource_name 
+            ELSE sessions.resource_name 
+        END,
+        technical_subtitle = COALESCE(excluded.technical_subtitle, sessions.technical_subtitle),
+        provider = COALESCE(excluded.provider, sessions.provider),
+        status = 'active';
+`);
+
+const statusStmt = db.prepare('UPDATE sessions SET status = ? WHERE session_id = ?');
+
+// Transazione batch atomica
+const executeBatchTransaction = db.transaction((upserts, statuses) => {
+    for (const sessionData of upserts) {
+        upsertStmt.run(sessionData);
+    }
+    for (const [sessionId, status] of statuses) {
+        statusStmt.run(status, sessionId);
+    }
+});
+
 /**
- * Salva o aggiorna una sessione nel Database
+ * Scrive l'accumulo in memoria su disco in un'unica transazione
+ */
+function flushBuffer() {
+    if (upsertBuffer.size === 0 && statusBuffer.size === 0) return;
+
+    const upsertsToFlush = Array.from(upsertBuffer.values());
+    const statusesToFlush = Array.from(statusBuffer.entries());
+
+    upsertBuffer.clear();
+    statusBuffer.clear();
+
+    try {
+        executeBatchTransaction(upsertsToFlush, statusesToFlush);
+    } catch (err) {
+        console.error('[DATABASE] Errore durante il flush del buffer nel DB:', err);
+    }
+}
+
+// Flush automatico ogni 2 secondi
+const FLUSH_INTERVAL_MS = 2000;
+const flushTimer = setInterval(flushBuffer, FLUSH_INTERVAL_MS);
+
+/**
+ * Accumula o aggiorna una sessione nel buffer in RAM
  */
 function upsertSession(sessionData) {
-    const query = `
-        INSERT INTO sessions (
-            session_id, remote_ip, remote_port, host_name, resource_name,
-            technical_subtitle, provider, country, service, total_bytes,
-            first_seen, last_seen, status
-        ) VALUES (
-            @sessionId, @remoteIp, @remotePort, @hostName, @resourceName,
-            @technicalSubtitle, @provider, @country, @service, @totalBytes,
-            @formattedTime, @formattedTime, 'active'
-        )
-        ON CONFLICT(session_id) DO UPDATE SET
-            total_bytes = @totalBytes,
-            last_seen = @formattedTime,
-            resource_name = CASE 
-                WHEN excluded.resource_name != 'Risorsa Web' AND excluded.resource_name != '' 
-                THEN excluded.resource_name 
-                ELSE sessions.resource_name 
-            END,
-            technical_subtitle = COALESCE(excluded.technical_subtitle, sessions.technical_subtitle),
-            provider = COALESCE(excluded.provider, sessions.provider),
-            status = 'active';
-    `;
-
-    const stmt = db.prepare(query);
-    stmt.run(sessionData);
+    upsertBuffer.set(sessionData.sessionId, sessionData);
 }
 
 /**
- * Aggiorna lo stato di una singola sessione (es. 'closed' o 'idle')
+ * Mette in coda il cambio stato di una sessione
  */
 function updateSessionStatus(sessionId, status) {
-    const stmt = db.prepare('UPDATE sessions SET status = ? WHERE session_id = ?');
-    stmt.run(status, sessionId);
+    if (upsertBuffer.has(sessionId)) {
+        upsertBuffer.get(sessionId).status = status;
+    }
+    statusBuffer.set(sessionId, status);
 }
 
 /**
- * Chiude tutte le sessioni aperte (active e idle) al momento dello spegnimento dell'app
+ * Chiude le sessioni ed esegue prima il flush dei dati pendenti
  */
 function closeAllActiveSessions() {
+    flushBuffer(); // Esegue il flush di ciò che c'era in memoria prima della chiusura
+    clearInterval(flushTimer);
+
     const stmt = db.prepare("UPDATE sessions SET status = 'closed' WHERE status IN ('active', 'idle')");
     const res = stmt.run();
     console.log(`[DATABASE] Tutte le sessioni attive e idle sono state segnate come "closed" (${res.changes} sessioni aggiornate).`);
@@ -95,5 +138,6 @@ module.exports = {
     db,
     upsertSession,
     updateSessionStatus,
-    closeAllActiveSessions
+    closeAllActiveSessions,
+    flushBuffer
 };

@@ -54,6 +54,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const noFiltersText = document.getElementById('no-filters-text');
     const tableBody = document.getElementById('connections-table-body');
 
+    // Mappe per tracciare le opzioni già inserite ed evitare duplicati
+    const existingDropdownOptions = {
+        country: new Set(),
+        service: new Set(),
+        provider: new Set(),
+        status: new Set()
+    };
+
     // === 4. ORDINAMENTO COLONNE TABELLA ===
     function initSortingHeaders() {
         const headers = document.querySelectorAll('#view-analytics th.sortable');
@@ -70,7 +78,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 
                 updateSortIcons();
-                applyFiltersAndRender(true); // Forziamo l'aggiornamento grafico al cambio ordinamento
+                applyFiltersAndRender(true);
             });
         });
     }
@@ -99,9 +107,9 @@ document.addEventListener('DOMContentLoaded', () => {
             
             allSessions = await response.json();
             
-            populateDropdowns(allSessions);
+            resetAndPopulateDropdowns(allSessions);
             updateSortIcons();
-            applyFiltersAndRender(true); // Forziamo aggiornamento iniziale grafico
+            applyFiltersAndRender(true);
         } catch (error) {
             console.error('Errore:', error);
             if (tableBody) {
@@ -110,47 +118,80 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function populateDropdowns(data) {
-        const getUniqueValues = (key) => {
-            return [...new Set(data.map(item => item[key]).filter(val => val !== null && val !== undefined && val !== ''))].sort();
-        };
+    function resetAndPopulateDropdowns(data) {
+        [
+            { key: 'country', el: selectCountry },
+            { key: 'service', el: selectService },
+            { key: 'provider', el: selectProvider },
+            { key: 'status', el: selectStatus }
+        ].forEach(({ key, el }) => {
+            if (!el) return;
+            existingDropdownOptions[key].clear();
 
-        fillSelect(selectCountry, getUniqueValues('country'));
-        fillSelect(selectService, getUniqueValues('service'));
-        fillSelect(selectProvider, getUniqueValues('provider'));
-        fillSelect(selectStatus, getUniqueValues('status'));
+            // Rimuove tutte le opzioni tranne la prima (es. "Tutti i paesi")
+            while (el.options.length > 1) {
+                el.remove(1);
+            }
+            
+            // Registra nel Set il valore della prima opzione se presente
+            Array.from(el.options).forEach(opt => {
+                if (opt.value) existingDropdownOptions[key].add(opt.value);
+            });
+        });
+
+        updateDropdownIncremental('country', selectCountry, data);
+        updateDropdownIncremental('service', selectService, data);
+        updateDropdownIncremental('provider', selectProvider, data);
+        updateDropdownIncremental('status', selectStatus, data);
     }
 
-    function fillSelect(selectElement, options) {
+    /**
+     * Inserimento INCREMENTALE: Aggiunge solo i nuovi valori univoci
+     */
+    function updateDropdownIncremental(key, selectElement, data) {
         if (!selectElement) return;
-        const currentVal = selectElement.value;
-        const firstOption = selectElement.options[0];
-        
-        selectElement.innerHTML = '';
-        selectElement.appendChild(firstOption);
+        const set = existingDropdownOptions[key];
 
-        options.forEach(opt => {
+        // Sincronizza il Set con eventuali opzioni già presenti nell'HTML
+        Array.from(selectElement.options).forEach(opt => {
+            if (opt.value) set.add(opt.value);
+        });
+
+        const newVals = [];
+        data.forEach(item => {
+            const val = item[key];
+            if (val !== null && val !== undefined && val !== '' && !set.has(val)) {
+                set.add(val);
+                newVals.push(val);
+            }
+        });
+
+        if (newVals.length === 0) return;
+
+        const fragment = document.createDocumentFragment();
+        newVals.sort().forEach(opt => {
             const optionEl = document.createElement('option');
             optionEl.value = opt;
             optionEl.textContent = opt;
-            selectElement.appendChild(optionEl);
+            fragment.appendChild(optionEl);
         });
-
-        selectElement.value = currentVal;
+        selectElement.appendChild(fragment);
     }
 
-    // === 6. WEBSOCKET E REQUISITO 1: THROTTLING GRAFICO OGNI 10 SECONDI ===
-    let renderScheduled = false;
+    // === 6. WEBSOCKET CON THROTTLING REALE DEI RENDERING ===
+    let renderTimer = null;
     let lastChartUpdateTime = 0;
-    const CHART_THROTTLE_MS = 10000; // 10 secondi
+    const CHART_THROTTLE_MS = 10000;
+    const RENDER_DEBOUNCE_MS = 300;
 
     function scheduleRender() {
-        if (renderScheduled) return;
-        renderScheduled = false; // Permettiamo chiamate immediate per la tabella
-        
-        if (viewAnalytics && !viewAnalytics.classList.contains('hidden')) {
-            applyFiltersAndRender(false); // false = non forza l'aggiornamento immediato del grafico
-        }
+        if (renderTimer) return;
+        renderTimer = setTimeout(() => {
+            renderTimer = null;
+            if (viewAnalytics && !viewAnalytics.classList.contains('hidden')) {
+                applyFiltersAndRender(false);
+            }
+        }, RENDER_DEBOUNCE_MS);
     }
 
     socket.on('new_packet', (packetData) => {
@@ -181,7 +222,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 status: 'active'
             };
             allSessions.unshift(newSession);
-            populateDropdowns(allSessions);
+            
+            updateDropdownIncremental('country', selectCountry, [newSession]);
+            updateDropdownIncremental('service', selectService, [newSession]);
+            updateDropdownIncremental('provider', selectProvider, [newSession]);
+            updateDropdownIncremental('status', selectStatus, [newSession]);
         }
 
         scheduleRender();
@@ -203,7 +248,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function setFilter(key, value) {
         activeFilters[key] = value;
-        applyFiltersAndRender(true); // Forziamo l'aggiornamento grafico immediato sull'azione dell'utente
+        applyFiltersAndRender(true);
     }
 
     function removeFilter(key) {
@@ -212,10 +257,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (key === 'service' && selectService) selectService.value = '';
         if (key === 'provider' && selectProvider) selectProvider.value = '';
         if (key === 'status' && selectStatus) selectStatus.value = '';
-        applyFiltersAndRender(true); // Forziamo l'aggiornamento grafico immediato
+        applyFiltersAndRender(true);
     }
 
-    // === REQUISITO 3: DISABILITA OPZIONE GRAFICO SE FILTRO ATTIVO ===
+    // === DISABILITA OPZIONE GRAFICO SE FILTRO ATTIVO ===
     function updateChartDropdownOptions() {
         const paramSelect = document.getElementById('paramSelect');
         if (!paramSelect) return;
@@ -225,22 +270,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
         Array.from(paramSelect.options).forEach(option => {
             const val = option.value;
-            // Verifica se per questo parametro esiste un filtro attivo
             const isFiltered = Boolean(activeFilters[val]);
 
             if (isFiltered) {
-                option.disabled = true;
-                option.textContent = `${getCategoryLabel(val)} (Filtro attivo)`;
+                if (!option.disabled) {
+                    option.disabled = true;
+                    option.textContent = `${getCategoryLabel(val)} (Filtro attivo)`;
+                }
                 if (val === currentVal) {
                     selectedOptionDisabled = true;
                 }
             } else {
-                option.disabled = false;
-                option.textContent = getCategoryLabel(val);
+                if (option.disabled) {
+                    option.disabled = false;
+                    option.textContent = getCategoryLabel(val);
+                }
             }
         });
 
-        // Se l'opzione correntemente vista nel grafico è stata disabilitata dal filtro, cambia automaticamente
         if (selectedOptionDisabled) {
             const firstAvailable = Array.from(paramSelect.options).find(opt => !opt.disabled);
             if (firstAvailable) {
@@ -253,7 +300,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // === 8. FILTRAGGIO, ORDINAMENTO E RENDERING TABELLA & STATS ===
     function applyFiltersAndRender(forceChartUpdate = false) {
         renderFilterChips();
-        updateChartDropdownOptions(); // Aggiorna le voci disabilitate del menu del grafico
+        updateChartDropdownOptions();
 
         let result = allSessions.filter(session => {
             if (activeFilters.country && session.country !== activeFilters.country) return false;
@@ -282,7 +329,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         window.filteredConnections = result;
 
-        // Gestione aggiornamento grafico con Throttle di 10 secondi
         const now = Date.now();
         if (forceChartUpdate || (now - lastChartUpdateTime >= CHART_THROTTLE_MS)) {
             if (typeof updateAnalyticsDashboard === 'function') {
