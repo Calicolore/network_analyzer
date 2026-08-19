@@ -4,7 +4,7 @@
 
 window.analyticsUI = {
     lastChartUpdateTime: 0,
-    CHART_THROTTLE_MS: 10000,
+    CHART_THROTTLE_MS: 500,
 
     formatBytes(bytes) {
         if (!bytes || bytes === 0) return '0 B';
@@ -19,10 +19,7 @@ window.analyticsUI = {
         return labels[key] || key;
     },
 
-    /**
-     * Aggiorna le Card KPI in cima alla pagina con i dati dell'intero DB
-     */
-    updateGlobalKpiUI() {
+    updateGlobalKpiUI(filteredDataset) {
         const state = window.analyticsState;
         const kpiConn = document.getElementById('kpi-connections');
         const kpiPerc = document.getElementById('kpi-percentage');
@@ -30,27 +27,21 @@ window.analyticsUI = {
         const kpiSub = document.getElementById('kpi-bandwidth-subtext');
         const kpiCountries = document.getElementById('kpi-countries');
 
-        const totalDbCount = state.globalDbStats.totalConnections || state.totalItems;
+        const dataset = filteredDataset || state.globalChartSessions;
 
-        if (kpiConn) {
-            if (state.totalItems < totalDbCount) {
-                const perc = totalDbCount > 0 ? ((state.totalItems / totalDbCount) * 100).toFixed(1) : '0';
-                kpiConn.innerText = `${state.totalItems} / ${totalDbCount}`;
-                if (kpiPerc) kpiPerc.innerText = `(${perc}% filtrate)`;
-            } else {
-                kpiConn.innerText = `${totalDbCount}`;
-                if (kpiPerc) kpiPerc.innerText = `(100% del totale)`;
-            }
-        }
+        const totalConnections = dataset.length;
+        const totalBytes = dataset.reduce((acc, s) => acc + (Number(s.total_bytes) || 0), 0);
+        const uniqueCountries = new Set(
+            dataset.map(s => s.country || s.country_name).filter(c => c && c !== 'N/A' && c !== 'Sconosciuta')
+        ).size;
 
-        if (kpiBw) kpiBw.innerText = this.formatBytes(state.globalDbStats.totalBytes);
-        if (kpiSub) kpiSub.innerText = `${this.formatBytes(state.globalDbStats.totalBytes)} totali nel DB`;
-        if (kpiCountries) kpiCountries.innerText = state.globalDbStats.totalCountries;
+        if (kpiConn) kpiConn.innerText = totalConnections.toLocaleString();
+        if (kpiPerc) kpiPerc.innerText = `(Totale Database Filtrato)`;
+        if (kpiBw) kpiBw.innerText = this.formatBytes(totalBytes);
+        if (kpiSub) kpiSub.innerText = `${this.formatBytes(totalBytes)} totali nel DB`;
+        if (kpiCountries) kpiCountries.innerText = uniqueCountries;
     },
 
-    /**
-     * Aggiorna la barra di paginazione
-     */
     updatePaginationUI() {
         const state = window.analyticsState;
         const startElem = document.getElementById('pag-start');
@@ -72,9 +63,6 @@ window.analyticsUI = {
         if (btnNext) btnNext.disabled = (state.currentPage >= state.totalPages);
     },
 
-    /**
-     * Inizializza gli eventi sui TH della tabella per l'ordinamento
-     */
     initSortingHeaders() {
         const headers = document.querySelectorAll('#view-analytics th.sortable');
         headers.forEach(header => {
@@ -113,66 +101,78 @@ window.analyticsUI = {
         });
     },
 
-    /**
-     * Popola i dropdown di filtraggio
-     */
-    resetAndPopulateDropdowns(data) {
+    resetAndPopulateDropdowns(dataset) {
         const state = window.analyticsState;
-        const selects = [
-            { key: 'country', el: document.getElementById('select-country') },
-            { key: 'service', el: document.getElementById('select-service') },
-            { key: 'provider', el: document.getElementById('select-provider') },
-            { key: 'status', el: document.getElementById('select-status') }
-        ];
+        const fields = ['country', 'service', 'provider', 'status'];
 
-        selects.forEach(({ key, el }) => {
-            if (!el) return;
-            state.existingDropdownOptions[key].clear();
+        fields.forEach(key => {
+            const selectEl = document.getElementById(`select-${key}`);
+            if (!selectEl) return;
 
-            while (el.options.length > 1) {
-                el.remove(1);
-            }
-            
-            Array.from(el.options).forEach(opt => {
-                if (opt.value) state.existingDropdownOptions[key].add(opt.value);
+            const currentSelected = state.activeFilters[key] || selectEl.value || '';
+            const distinctSet = new Set();
+
+            dataset.forEach(item => {
+                const val = item[key];
+                if (val !== null && val !== undefined) {
+                    const strVal = String(val).trim();
+                    if (strVal !== '' && strVal !== 'N/A' && strVal !== 'Sconosciuta') {
+                        distinctSet.add(strVal);
+                    }
+                }
             });
 
-            this.updateDropdownIncremental(key, el, data);
+            state.existingDropdownOptions[key] = distinctSet;
+
+            const sortedValues = Array.from(distinctSet).sort((a, b) => 
+                a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true })
+            );
+
+            selectEl.innerHTML = '';
+            
+            const defaultOpt = document.createElement('option');
+            defaultOpt.value = '';
+            defaultOpt.textContent = `Tutti (${this.getCategoryLabel(key)})`;
+            selectEl.appendChild(defaultOpt);
+
+            sortedValues.forEach(val => {
+                const opt = document.createElement('option');
+                opt.value = val;
+                opt.textContent = val;
+                if (val === currentSelected) {
+                    opt.selected = true;
+                }
+                selectEl.appendChild(opt);
+            });
         });
     },
 
-    updateDropdownIncremental(key, selectElement, data) {
-        if (!selectElement) return;
-        const set = window.analyticsState.existingDropdownOptions[key];
+    updateDropdownsWithNewItem(packetData) {
+        const state = window.analyticsState;
+        const fields = ['country', 'service', 'provider', 'status'];
 
-        Array.from(selectElement.options).forEach(opt => {
-            if (opt.value) set.add(opt.value);
-        });
+        fields.forEach(key => {
+            const val = packetData[key];
+            if (!val) return;
 
-        const newVals = [];
-        data.forEach(item => {
-            const val = item[key];
-            if (val !== null && val !== undefined && val !== '' && !set.has(val)) {
-                set.add(val);
-                newVals.push(val);
+            const strVal = String(val).trim();
+            if (strVal === '' || strVal === 'N/A' || strVal === 'Sconosciuta') return;
+
+            const distinctSet = state.existingDropdownOptions[key];
+            if (distinctSet && !distinctSet.has(strVal)) {
+                distinctSet.add(strVal);
+                
+                const selectEl = document.getElementById(`select-${key}`);
+                if (selectEl) {
+                    const opt = document.createElement('option');
+                    opt.value = strVal;
+                    opt.textContent = strVal;
+                    selectEl.appendChild(opt);
+                }
             }
         });
-
-        if (newVals.length === 0) return;
-
-        const fragment = document.createDocumentFragment();
-        newVals.sort().forEach(opt => {
-            const optionEl = document.createElement('option');
-            optionEl.value = opt;
-            optionEl.textContent = opt;
-            fragment.appendChild(optionEl);
-        });
-        selectElement.appendChild(fragment);
     },
 
-    /**
-     * Mostra i chip dei filtri attivi
-     */
     renderFilterChips() {
         const activeFiltersBox = document.getElementById('active-filters-box');
         const noFiltersText = document.getElementById('no-filters-text');
@@ -199,6 +199,7 @@ window.analyticsUI = {
                     state.activeFilters[key] = '';
                     const selectEl = document.getElementById(`select-${key}`);
                     if (selectEl) selectEl.value = '';
+                    state.currentPage = 1;
                     this.applyFiltersAndRender(true);
                 });
                 activeFiltersBox.appendChild(chip);
@@ -236,20 +237,20 @@ window.analyticsUI = {
             const firstAvailable = Array.from(paramSelect.options).find(opt => !opt.disabled);
             if (firstAvailable) {
                 paramSelect.value = firstAvailable.value;
-                paramSelect.dispatchEvent(new Event('change'));
             }
         }
     },
 
     /**
-     * Applica ordinamento, filtri grafici e renderizza la tabella
+     * Filtra l'INTERO DATABASE per il grafico e suddivide in pagine per la tabella
      */
     applyFiltersAndRender(forceChartUpdate = false) {
         const state = window.analyticsState;
         this.renderFilterChips();
         this.updateChartDropdownOptions();
 
-        let result = state.allSessions.filter(session => {
+        // 1. Filtra l'intero dataset del database
+        let fullFilteredDataset = state.globalChartSessions.filter(session => {
             if (state.activeFilters.country && session.country !== state.activeFilters.country) return false;
             if (state.activeFilters.service && session.service !== state.activeFilters.service) return false;
             if (state.activeFilters.provider && session.provider !== state.activeFilters.provider) return false;
@@ -257,7 +258,8 @@ window.analyticsUI = {
             return true;
         });
 
-        result.sort((a, b) => {
+        // 2. Ordina l'intero dataset filtrato
+        fullFilteredDataset.sort((a, b) => {
             let valA = a[state.currentSortColumn] ?? '';
             let valB = b[state.currentSortColumn] ?? '';
 
@@ -274,18 +276,32 @@ window.analyticsUI = {
             return 0;
         });
 
-        window.filteredConnections = result;
+        // 3. IMPOSTA L'INTERO DATASET FILTRATO COME RIFERIMENTO GLOBALE PER I GRAFICI
+        window.filteredConnections = fullFilteredDataset;
 
+        // 4. Calcola la paginazione basata sull'intero DB filtrato
+        state.totalItems = fullFilteredDataset.length;
+        state.totalPages = Math.max(1, Math.ceil(state.totalItems / state.currentLimit));
+        if (state.currentPage > state.totalPages) state.currentPage = state.totalPages;
+
+        // 5. Estrai la porzione di elementi SOLO per la tabella della pagina corrente
+        const startIdx = (state.currentPage - 1) * state.currentLimit;
+        const pageTableData = fullFilteredDataset.slice(startIdx, startIdx + state.currentLimit);
+        state.allSessions = pageTableData;
+
+        // 6. Invia l'INTERO dataset filtrato al Grafico a Torta
         const now = Date.now();
         if (forceChartUpdate || (now - this.lastChartUpdateTime >= this.CHART_THROTTLE_MS)) {
             if (typeof updateAnalyticsDashboard === 'function') {
-                updateAnalyticsDashboard(result, state.allSessions);
+                updateAnalyticsDashboard(fullFilteredDataset, state.globalChartSessions);
                 this.lastChartUpdateTime = now;
             }
         }
 
-        this.renderTable(result);
-        this.updateGlobalKpiUI();
+        // 7. Aggiorna Tabella, Paginazione e KPI
+        this.renderTable(pageTableData);
+        this.updatePaginationUI();
+        this.updateGlobalKpiUI(fullFilteredDataset);
     },
 
     renderTable(data) {

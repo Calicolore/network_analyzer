@@ -3,7 +3,8 @@
  */
 
 window.analyticsState = {
-    allSessions: [],
+    allSessions: [],            // Sessioni della pagina corrente (per la tabella)
+    globalChartSessions: [],    // TUTTE le sessioni dell'intero DB (per grafico e filtri)
     currentSortColumn: 'last_seen',
     currentSortOrder: 'desc',
     currentLimit: 25,
@@ -34,56 +35,23 @@ window.analyticsState = {
 
 window.analyticsApi = {
     /**
-     * Carica i dati dal DB per la pagina e il range temporale corrente
+     * Carica l'intero dataset dal server per alimentare grafico, filtri e tabella globale
      */
     async loadSessionsData() {
         const state = window.analyticsState;
         const tableBody = document.getElementById('connections-table-body');
 
         try {
-            let url = `/api/sessions?page=${state.currentPage}&limit=${state.currentLimit}&timePreset=${state.currentTimePreset}`;
-            if (state.currentTimePreset === 'custom' && state.customStart && state.customEnd) {
-                url += `&startDate=${encodeURIComponent(state.customStart)}&endDate=${encodeURIComponent(state.customEnd)}`;
-            }
+            // 1. Scarica l'intero dataset dal DB (exportAll=true & limit=99999)
+            state.globalChartSessions = await this.fetchAllFilteredForExport();
 
-            const response = await fetch(url);
-            if (!response.ok) throw new Error('Errore nel recupero dati dal server');
-            
-            const result = await response.json();
-            
-            // Estrazione array sessioni della pagina corrente
-            state.allSessions = Array.isArray(result) ? result : (result.data || []);
-            
-            // Calcolo paginazione per l'intero DB
-            if (result.pagination) {
-                state.totalItems = parseInt(result.pagination.total, 10) || 0;
-                state.totalPages = parseInt(result.pagination.totalPages, 10) || Math.ceil(state.totalItems / state.currentLimit) || 1;
-            } else {
-                state.totalItems = state.allSessions.length;
-                state.totalPages = Math.ceil(state.totalItems / state.currentLimit) || 1;
-            }
-            if (state.totalPages < 1) state.totalPages = 1;
-
-            // Estrazione statistiche sull'intero DB per le card KPI
-            if (result.stats) {
-                state.globalDbStats = {
-                    totalConnections: Number(result.stats.totalConnections ?? result.stats.total_connections ?? state.totalItems),
-                    totalBytes: Number(result.stats.totalBytes ?? result.stats.total_bytes ?? 0),
-                    totalCountries: Number(result.stats.totalCountries ?? result.stats.total_countries ?? 0)
-                };
-            } else {
-                state.globalDbStats = {
-                    totalConnections: state.totalItems,
-                    totalBytes: state.globalDbStats.totalBytes || state.allSessions.reduce((acc, s) => acc + (s.total_bytes || 0), 0),
-                    totalCountries: state.globalDbStats.totalCountries || new Set(state.allSessions.map(s => s.country).filter(Boolean)).size
-                };
-            }
-
-            // Aggiorna l'interfaccia utente
+            // Popola i menu a tendina con i valori DISTINCT dell'intero DB se vuoti
             if (window.analyticsUI) {
-                window.analyticsUI.updateGlobalKpiUI();
-                window.analyticsUI.updatePaginationUI();
-                window.analyticsUI.resetAndPopulateDropdowns(state.allSessions);
+                window.analyticsUI.resetAndPopulateDropdowns(state.globalChartSessions);
+            }
+
+            // 2. Applica i filtri ed esegui il rendering completo (Grafico + Tabella)
+            if (window.analyticsUI) {
                 window.analyticsUI.updateSortIcons();
                 window.analyticsUI.applyFiltersAndRender(true);
             }
@@ -96,28 +64,20 @@ window.analyticsApi = {
     },
 
     /**
-     * Scarica tutte le sessioni filtrate senza paginazione per l'export
+     * Scarica tutte le sessioni dal DB per filtri, esportazione e grafico a torta
      */
     async fetchAllFilteredForExport() {
         const state = window.analyticsState;
-        let url = `/api/sessions?exportAll=true&timePreset=${state.currentTimePreset}`;
+        let url = `/api/sessions?exportAll=true&limit=99999&timePreset=${state.currentTimePreset}`;
+        
         if (state.currentTimePreset === 'custom' && state.customStart && state.customEnd) {
             url += `&startDate=${encodeURIComponent(state.customStart)}&endDate=${encodeURIComponent(state.customEnd)}`;
         }
         
         const res = await fetch(url);
-        if (!res.ok) throw new Error('Impossibile scaricare tutti i dati per l\'esportazione');
+        if (!res.ok) throw new Error('Impossibile scaricare i dati dal server');
         
         const result = await res.json();
-        let data = Array.isArray(result) ? result : (result.data || []);
-        
-        // Filtra lato client per i filtri di categoria attivi
-        return data.filter(s => {
-            if (state.activeFilters.country && s.country !== state.activeFilters.country) return false;
-            if (state.activeFilters.service && s.service !== state.activeFilters.service) return false;
-            if (state.activeFilters.provider && s.provider !== state.activeFilters.provider) return false;
-            if (state.activeFilters.status && s.status !== state.activeFilters.status) return false;
-            return true;
-        });
+        return Array.isArray(result) ? result : (result.data || []);
     }
 };

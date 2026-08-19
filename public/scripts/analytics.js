@@ -35,18 +35,16 @@ document.addEventListener('DOMContentLoaded', () => {
             btnAnalytics.classList.add('active');
             btnLive.classList.remove('active');
 
-            // Carica i dati paginati dal DB al passaggio di vista
             api.loadSessionsData();
         });
     }
 
-    // Synchronizza limite iniziale dal DOM per la paginazione istantanea
     const limitSelectEl = document.getElementById('select-page-limit');
     if (limitSelectEl) {
         state.currentLimit = parseInt(limitSelectEl.value, 10) || 25;
     }
 
-    // === 3. WEBSOCKET REAL-TIME CON THROTTLING ===
+    // === 3. WEBSOCKET REAL-TIME ===
     let renderTimer = null;
     const RENDER_DEBOUNCE_MS = 300;
 
@@ -61,68 +59,62 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     socket.on('new_packet', (packetData) => {
-        const existing = state.allSessions.find(s => s.session_id === packetData.sessionId);
         const calculatedBytes = Math.round(parseFloat(packetData.totalKB || 0) * 1024) || packetData.size || 0;
 
-        if (existing) {
-            existing.total_bytes = Math.max(existing.total_bytes || 0, calculatedBytes);
-            existing.last_seen = packetData.time;
-            if (packetData.hostName) existing.host_name = packetData.hostName;
-            if (packetData.provider) existing.provider = packetData.provider;
-            if (packetData.service) existing.service = packetData.service;
-            existing.status = 'active';
+        // 1. Aggiorna dataset globale per grafico e filtri
+        const existingGlobal = state.globalChartSessions.find(s => s.session_id === packetData.sessionId);
+        if (existingGlobal) {
+            existingGlobal.total_bytes = Math.max(existingGlobal.total_bytes || 0, calculatedBytes);
+            existingGlobal.last_seen = packetData.time;
+            if (packetData.hostName) existingGlobal.host_name = packetData.hostName;
+            if (packetData.provider) existingGlobal.provider = packetData.provider;
+            if (packetData.service) existingGlobal.service = packetData.service;
+            existingGlobal.status = 'active';
         } else {
-            state.globalDbStats.totalConnections++;
-            state.globalDbStats.totalBytes += calculatedBytes;
-
-            if (state.currentPage === 1) { // Inserisce in cima solo se si naviga la prima pagina
-                const newSession = {
-                    session_id: packetData.sessionId,
-                    remote_ip: packetData.remoteIp,
-                    remote_port: packetData.remotePort,
-                    host_name: packetData.hostName || 'N/A',
-                    resource_name: packetData.resourceName || '',
-                    technical_subtitle: packetData.technicalSubtitle || '',
-                    provider: packetData.provider || 'N/A',
-                    country: packetData.country || 'N/A',
-                    service: packetData.service || 'N/A',
-                    total_bytes: calculatedBytes,
-                    first_seen: packetData.time,
-                    last_seen: packetData.time,
-                    status: 'active'
-                };
-                state.allSessions.unshift(newSession);
-                if (state.allSessions.length > state.currentLimit) state.allSessions.pop();
-                
-                state.totalItems++;
-                state.totalPages = Math.max(1, Math.ceil(state.totalItems / state.currentLimit));
-                ui.updatePaginationUI();
-
-                ui.updateDropdownIncremental('country', document.getElementById('select-country'), [newSession]);
-                ui.updateDropdownIncremental('service', document.getElementById('select-service'), [newSession]);
-                ui.updateDropdownIncremental('provider', document.getElementById('select-provider'), [newSession]);
-                ui.updateDropdownIncremental('status', document.getElementById('select-status'), [newSession]);
-            }
+            const newGlobalSession = {
+                session_id: packetData.sessionId,
+                remote_ip: packetData.remoteIp,
+                remote_port: packetData.remotePort,
+                host_name: packetData.hostName || 'N/A',
+                resource_name: packetData.resourceName || '',
+                technical_subtitle: packetData.technicalSubtitle || '',
+                provider: packetData.provider || 'N/A',
+                country: packetData.country || 'N/A',
+                service: packetData.service || 'N/A',
+                total_bytes: calculatedBytes,
+                first_seen: packetData.time,
+                last_seen: packetData.time,
+                status: 'active'
+            };
+            state.globalChartSessions.unshift(newGlobalSession);
         }
 
-        ui.updateGlobalKpiUI();
+        // 2. Aggiungi il valore ai dropdown se nuovo
+        ui.updateDropdownsWithNewItem(packetData);
+
         scheduleRender();
     });
 
     socket.on('session_closed', (data) => {
-        const existing = state.allSessions.find(s => s.session_id === data.sessionId);
-        if (existing) {
-            existing.status = data.reason === 'Idle Timeout' ? 'idle' : 'closed';
-            scheduleRender();
+        const existingGlobal = state.globalChartSessions.find(s => s.session_id === data.sessionId);
+        if (existingGlobal) {
+            existingGlobal.status = data.reason === 'Idle Timeout' ? 'idle' : 'closed';
         }
+        scheduleRender();
     });
 
     // === 4. EVENT LISTENERS PER FILTRI & PAGINAZIONE ===
     ['country', 'service', 'provider', 'status'].forEach(key => {
         document.getElementById(`select-${key}`)?.addEventListener('change', (e) => {
             state.activeFilters[key] = e.target.value;
+            state.currentPage = 1;
             ui.applyFiltersAndRender(true);
         });
+    });
+
+    // Event listener per il cambio parametro grafico (es. Nazione -> Servizio)
+    document.getElementById('paramSelect')?.addEventListener('change', () => {
+        ui.applyFiltersAndRender(true);
     });
 
     const selectTimePreset = document.getElementById('select-time-preset');
@@ -152,28 +144,28 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('select-page-limit')?.addEventListener('change', (e) => {
         state.currentLimit = parseInt(e.target.value, 10) || 25;
         state.currentPage = 1;
-        api.loadSessionsData();
+        ui.applyFiltersAndRender(false);
     });
 
     document.getElementById('btn-page-prev')?.addEventListener('click', () => {
         if (state.currentPage > 1) {
             state.currentPage--;
-            api.loadSessionsData();
+            ui.applyFiltersAndRender(false);
         }
     });
 
     document.getElementById('btn-page-next')?.addEventListener('click', () => {
         if (state.currentPage < state.totalPages) {
             state.currentPage++;
-            api.loadSessionsData();
+            ui.applyFiltersAndRender(false);
         }
     });
 
-    // === 5. EVENT LISTENERS PER ESPORTAZIONE ===
+    // === 5. ESPORTAZIONE ===
     document.getElementById('btn-export-csv')?.addEventListener('click', () => exp.exportToCsv());
     document.getElementById('btn-export-json')?.addEventListener('click', () => exp.exportToJson());
 
-    // === 6. INIZIALIZZAZIONE COMPONENTI ===
+    // === 6. INIZIALIZZAZIONE ===
     ui.initSortingHeaders();
     api.loadSessionsData();
 });
