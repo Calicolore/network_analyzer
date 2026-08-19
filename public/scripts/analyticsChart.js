@@ -20,6 +20,17 @@ function formatBytesChart(bytes) {
 }
 
 /**
+ * Verificatore dei valori non definiti o non validi
+ */
+function isUndefinedValue(val, param) {
+    if (!val) return true;
+    const str = String(val).trim().toLowerCase();
+    if (str === '' || str === 'unknown' || str === 'n/a' || str === 'non definito' || str === 'sconosciuta' || str === '-') return true;
+    if (param === 'country' && (str === '??' || str === '?')) return true;
+    return false;
+}
+
+/**
  * Aggiorna sia i contatori KPI in cima sia il grafico a torta
  */
 function updateAnalyticsDashboard(filteredData = [], totalData = []) {
@@ -46,9 +57,9 @@ function updateAnalyticsDashboard(filteredData = [], totalData = []) {
         bwSubElem.innerText = `${formatBytesChart(totalBytes)} totali nel DB`;
     }
 
-    // 3. KPI Nazioni
+    // 3. KPI Nazioni (esclude nazioni non definite)
     const uniqueCountries = new Set(
-        filteredData.map(r => r.country).filter(c => c && c !== 'Unknown' && c !== '-' && c !== 'Sconosciuta')
+        filteredData.map(r => r.country).filter(c => !isUndefinedValue(c, 'country'))
     );
     const countryElem = document.getElementById('kpi-countries');
     if (countryElem) {
@@ -64,6 +75,7 @@ function updateAnalyticsDashboard(filteredData = [], totalData = []) {
  */
 function renderAnalyticsChart(data = []) {
     const canvas = document.getElementById('analyticsPieChart');
+    const undefinedInfoElem = document.getElementById('undefined-stats-info');
     if (!canvas) return;
 
     const selectedParam = document.getElementById('paramSelect')?.value || 'country';
@@ -74,24 +86,53 @@ function renderAnalyticsChart(data = []) {
             analyticsPieChart.destroy();
             analyticsPieChart = null;
         }
+        if (undefinedInfoElem) undefinedInfoElem.innerHTML = '';
         return;
     }
 
-    // Conteggio grezzo delle occorrenze
+    // Conteggio separato tra dati validi e dati non definiti ("??", "Non Definito", ecc.)
     const rawCounts = {};
+    let undefinedCount = 0;
+
     data.forEach(row => {
-        let val = row[selectedParam];
-        if (!val || val === '' || val === 'Unknown' || val === 'N/A') val = 'Non Definito';
-        rawCounts[val] = (rawCounts[val] || 0) + 1;
+        const val = row[selectedParam];
+        if (isUndefinedValue(val, selectedParam)) {
+            undefinedCount++;
+        } else {
+            const strVal = String(val).trim();
+            rawCounts[strVal] = (rawCounts[strVal] || 0) + 1;
+        }
     });
 
-    // Soglia percentuale per accorpare in "Altro" (2%)
+    const validTotalCount = totalCount - undefinedCount;
+
+    // Aggiorna l'area di testo sotto il grafico
+    if (undefinedInfoElem) {
+        if (undefinedCount > 0) {
+            const paramLabel = selectedParam === 'country' ? 'Nazione non definita ("??")' :
+                               selectedParam === 'provider' ? 'Provider non definito' : 'Valore non definito';
+            undefinedInfoElem.innerHTML = `⚠️ <strong>${undefinedCount}</strong> connessioni con <em>${paramLabel}</em> escluse dal grafico (percentuali calcolate sulle <strong>${validTotalCount}</strong> connessioni valide).`;
+        } else {
+            undefinedInfoElem.innerHTML = `✅ Tutte le <strong>${totalCount}</strong> connessioni filtrate hanno un parametro valido.`;
+        }
+    }
+
+    // Se non ci sono dati validi da mostrare
+    if (validTotalCount === 0) {
+        if (analyticsPieChart) {
+            analyticsPieChart.destroy();
+            analyticsPieChart = null;
+        }
+        return;
+    }
+
+    // Soglia percentuale per "Altro" (2%) calcolata SOLO sulle connessioni valide
     const THRESHOLD_PERCENT = 2.0; 
     const counts = {};
     let altroCount = 0;
 
     Object.entries(rawCounts).forEach(([label, count]) => {
-        const percentage = (count / totalCount) * 100;
+        const percentage = (count / validTotalCount) * 100;
         if (percentage < THRESHOLD_PERCENT) {
             altroCount += count;
         } else {
@@ -111,19 +152,23 @@ function renderAnalyticsChart(data = []) {
         return CHART_COLORS[i % (CHART_COLORS.length - 1)];
     });
 
-    // === OTTIMIZZAZIONE PRESTAZIONI ===
-    // Se il grafico esiste già, aggiorna solo i dati ed esegui l'update 'none' (senza animazioni)
+    // Aggiornamento grafico esistente
     if (analyticsPieChart) {
         analyticsPieChart.data.labels = labels;
         analyticsPieChart.data.datasets[0].data = values;
         analyticsPieChart.data.datasets[0].backgroundColor = bgColors;
         
-        // Modalità 'none': azzera il carico CPU evitando il rendering frame-by-frame delle animazioni
+        analyticsPieChart.options.plugins.tooltip.callbacks.label = function(context) {
+            const count = context.raw;
+            const percentage = ((count / validTotalCount) * 100).toFixed(1);
+            return ` ${context.label}: ${count} con. (${percentage}%)`;
+        };
+
         analyticsPieChart.update('none');
         return;
     }
 
-    // Creazione iniziale solo al primo caricamento
+    // Creazione iniziale del grafico
     const ctx = canvas.getContext('2d');
     analyticsPieChart = new Chart(ctx, {
         type: 'pie',
@@ -139,13 +184,13 @@ function renderAnalyticsChart(data = []) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            animation: false, // Disabilita animazioni iniziali
+            animation: false,
             plugins: {
                 tooltip: {
                     callbacks: {
                         label: function(context) {
                             const count = context.raw;
-                            const percentage = ((count / totalCount) * 100).toFixed(1);
+                            const percentage = ((count / validTotalCount) * 100).toFixed(1);
                             return ` ${context.label}: ${count} con. (${percentage}%)`;
                         }
                     }
@@ -159,7 +204,7 @@ function renderAnalyticsChart(data = []) {
     });
 }
 
-// Event Listener sul cambio del parametro dal menu a tendina
+// Event Listener sul cambio parametro
 document.addEventListener('DOMContentLoaded', () => {
     const paramSelect = document.getElementById('paramSelect');
     if (paramSelect) {
