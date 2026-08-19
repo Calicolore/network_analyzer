@@ -41,15 +41,81 @@ function startServer(port) {
     // PASSO 1: Configurazione del middleware per la fruizione dei file statici del frontend
     app.use(express.static(path.join(__dirname, '../public')));
 
-    // PASSO 2: API REST per il recupero di tutte le sessioni dal database
+    // PASSO 2: API REST con Paginazione SQL, Filtri Temporali e Statistiche Globali
     app.get('/api/sessions', (req, res) => {
-        const query = 'SELECT * FROM sessions ORDER BY last_seen DESC';
-        db.all(query, [], (err, rows) => {
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 25;
+        const offset = (page - 1) * limit;
+        const timePreset = req.query.timePreset || 'all';
+        const startDate = req.query.startDate;
+        const endDate = req.query.endDate;
+        const exportAll = req.query.exportAll === 'true';
+
+        let whereClauses = [];
+        let params = [];
+
+        // Filtri temporali in SQL
+        if (timePreset === '1h') {
+            whereClauses.push("last_seen >= datetime('now', '-1 hour')");
+        } else if (timePreset === 'today') {
+            whereClauses.push("last_seen >= datetime('now', 'start of day')");
+        } else if (timePreset === '7d') {
+            whereClauses.push("last_seen >= datetime('now', '-7 days')");
+        } else if (timePreset === 'custom' && startDate && endDate) {
+            whereClauses.push("last_seen BETWEEN ? AND ?");
+            params.push(startDate, endDate);
+        }
+
+        const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+        // Query 1: Calcolo metriche globali sull'intero DB (o sull'intervallo temporale selezionato)
+        const statsQuery = `
+            SELECT 
+                COUNT(*) AS totalConnections,
+                COALESCE(SUM(total_bytes), 0) AS totalBytes,
+                COUNT(DISTINCT country) AS totalCountries
+            FROM sessions ${whereSql}
+        `;
+
+        db.get(statsQuery, params, (err, statsRow) => {
             if (err) {
-                console.error('[DATABASE] Errore durante la query:', err.message);
+                console.error('[DATABASE] Errore calcolo KPI:', err.message);
                 return res.status(500).json({ error: 'Errore interno del database' });
             }
-            res.json(rows);
+
+            // Query 2: Recupero dei record paginati per la tabella
+            let dataQuery = `SELECT * FROM sessions ${whereSql} ORDER BY last_seen DESC`;
+            let dataParams = [...params];
+
+            if (!exportAll) {
+                dataQuery += ` LIMIT ? OFFSET ?`;
+                dataParams.push(limit, offset);
+            }
+
+            db.all(dataQuery, dataParams, (err, rows) => {
+                if (err) {
+                    console.error('[DATABASE] Errore durante la query dati:', err.message);
+                    return res.status(500).json({ error: 'Errore interno del database' });
+                }
+
+                const total = statsRow ? statsRow.totalConnections : 0;
+                const totalPages = Math.ceil(total / limit) || 1;
+
+                res.json({
+                    data: rows,
+                    pagination: {
+                        total: total,
+                        page: page,
+                        limit: limit,
+                        totalPages: totalPages
+                    },
+                    stats: {
+                        totalConnections: total,
+                        totalBytes: statsRow ? statsRow.totalBytes : 0,
+                        totalCountries: statsRow ? statsRow.totalCountries : 0
+                    }
+                });
+            });
         });
     });
 
