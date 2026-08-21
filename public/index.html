@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="it">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,45 +12,54 @@
         .spa-view.hidden {
             display: none !important;
         }
+
         .nav-link.active {
             background: #2563eb !important;
             color: #ffffff !important;
         }
     </style>
 </head>
+
 <body>
 
     <!-- HEADER / BARRA SUPERIORE DI NAVIGAZIONE -->
-    <header style="display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; background: #0f172a; color: white;">
+    <header
+        style="display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; background: #0f172a; color: white;">
         <h1 style="margin: 0; font-size: 1.5em; border: none; padding: 0;">Network Analyzer</h1>
-        
+
         <div style="display: flex; gap: 10px; align-items: center;">
             <!-- BADGE DI STATO MODALITÀ (REAL TIME / IMPORTED) -->
-            <span id="mode-status-badge" style="background: #10b981; color: white; padding: 5px 10px; border-radius: 12px; font-size: 0.8em; font-weight: bold; text-transform: uppercase;">
+            <span id="mode-status-badge"
+                style="background: #10b981; color: white; padding: 5px 10px; border-radius: 12px; font-size: 0.8em; font-weight: bold; text-transform: uppercase;">
                 🔴 REAL TIME
             </span>
 
             <!-- SELETTORE / GESTIONE DB IMPORTATI -->
             <div style="position: relative; display: flex; align-items: center; gap: 5px;">
                 <input type="file" id="input-header-import-file" accept=".json, .csv" style="display: none;">
-                
-                <select id="select-imported-db" style="background: #334155; color: white; border: 1px solid #475569; padding: 6px 10px; border-radius: 6px; font-size: 0.85em; font-weight: bold; cursor: pointer;">
+
+                <select id="select-imported-db"
+                    style="background: #334155; color: white; border: 1px solid #475569; padding: 6px 10px; border-radius: 6px; font-size: 0.85em; font-weight: bold; cursor: pointer;">
                     <option value="" disabled selected>📂 DB Importati</option>
                     <option value="__NEW__">➕ Importa nuovo DB (JSON/CSV)...</option>
                 </select>
 
-                <button id="btn-reset-import" style="display: none; background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.8em;">
+                <button id="btn-reset-import"
+                    style="display: none; background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.8em;">
                     ✖ Torna a Real Time
                 </button>
             </div>
 
-            <button id="nav-btn-live" class="nav-link active" style="background: #334155; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.9em;">
+            <button id="nav-btn-live" class="nav-link active"
+                style="background: #334155; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.9em;">
                 🌐 Real Time Traffic
             </button>
-            <button id="nav-btn-analytics" class="nav-link" style="background: #334155; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.9em;">
+            <button id="nav-btn-analytics" class="nav-link"
+                style="background: #334155; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.9em;">
                 📊 Analytics & Filtri DB
             </button>
-            <button id="open-settings-btn" style="background: #334155; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold;">
+            <button id="open-settings-btn"
+                style="background: #334155; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold;">
                 ⚙️ Impostazioni
             </button>
         </div>
@@ -59,7 +69,7 @@
     <!-- VISTA 1: TEMPO REALE (MAPPA, GRAFICO E CARDS REAL TIME)                 -->
     <!-- =================================================================== -->
     <div id="view-live" class="spa-view">
-        
+
         <div id="map-container" style="margin-top: 20px;">
             <div id="map"></div>
             <div id="map-resize-handle" class="resize-handle"></div>
@@ -68,13 +78,14 @@
         <div class="section-header" style="display: flex; justify-content: space-between; align-items: center;">
             <div style="display: flex; align-items: center; gap: 15px;">
                 <h2 style="margin: 0;">📊 Consumo di Banda</h2>
-                
+
                 <div class="chart-view-selector" style="display: flex; gap: 5px;">
                     <button id="btn-chart-line" class="btn-chart-type active">📈 Temporale</button>
                     <button id="btn-chart-bar" class="btn-chart-type">📊 Per Connessione</button>
                 </div>
 
-                <span id="bandwidth-stats-text" class="stats-text" style="color: #94a3b8; font-size: 0.9em; font-weight: bold;">
+                <span id="bandwidth-stats-text" class="stats-text"
+                    style="color: #94a3b8; font-size: 0.9em; font-weight: bold;">
                     Download: 0.0 KB/s | Upload: 0.0 KB/s
                 </span>
             </div>
@@ -100,7 +111,8 @@
 
         <div class="search-filter-bar">
             <div class="search-box">
-                <input type="text" id="domainSearchInput" placeholder="🔍 Cerca dominio (es. youtube, google, x)..." autocomplete="off" />
+                <input type="text" id="domainSearchInput" placeholder="🔍 Cerca dominio (es. youtube, google, x)..."
+                    autocomplete="off" />
             </div>
 
             <div class="filter-dropdowns">
@@ -123,33 +135,49 @@
     <!-- VISTA 2: DATABASE & ANALYTICS                                      -->
     <!-- =================================================================== -->
     <div id="view-analytics" class="spa-view hidden" style="margin-top: 20px;">
-        
+
         <!-- 1. STATISTICHE KPI -->
-        <div class="kpi-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 20px;">
-            <div class="kpi-card" style="background: #1e293b; padding: 15px; border-radius: 8px; border: 1px solid #334155;">
+        <div class="kpi-container"
+            style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 20px;">
+            <div class="kpi-card"
+                style="background: #1e293b; padding: 15px; border-radius: 8px; border: 1px solid #334155;">
                 <span style="font-size: 0.85em; color: #94a3b8; display: block; font-weight: bold;">Connessioni</span>
-                <span id="kpi-connections" style="font-size: 1.6em; font-weight: bold; color: #38bdf8; display: block; margin-top: 5px;">0 / 0</span>
-                <span id="kpi-percentage" style="font-size: 0.8em; color: #64748b; display: block; margin-top: 4px;">(0% del totale)</span>
+                <span id="kpi-connections"
+                    style="font-size: 1.6em; font-weight: bold; color: #38bdf8; display: block; margin-top: 5px;">0 /
+                    0</span>
+                <span id="kpi-percentage" style="font-size: 0.8em; color: #64748b; display: block; margin-top: 4px;">(0%
+                    del totale)</span>
             </div>
-            <div class="kpi-card" style="background: #1e293b; padding: 15px; border-radius: 8px; border: 1px solid #334155;">
+            <div class="kpi-card"
+                style="background: #1e293b; padding: 15px; border-radius: 8px; border: 1px solid #334155;">
                 <span style="font-size: 0.85em; color: #94a3b8; display: block; font-weight: bold;">Traffico</span>
-                <span id="kpi-bandwidth" style="font-size: 1.6em; font-weight: bold; color: #10b981; display: block; margin-top: 5px;">0 KB</span>
-                <span id="kpi-bandwidth-subtext" style="font-size: 0.8em; color: #64748b; display: block; margin-top: 4px;">0 B totali nel DB</span>
+                <span id="kpi-bandwidth"
+                    style="font-size: 1.6em; font-weight: bold; color: #10b981; display: block; margin-top: 5px;">0
+                    KB</span>
+                <span id="kpi-bandwidth-subtext"
+                    style="font-size: 0.8em; color: #64748b; display: block; margin-top: 4px;">0 B totali nel DB</span>
             </div>
-            <div class="kpi-card" style="background: #1e293b; padding: 15px; border-radius: 8px; border: 1px solid #334155;">
+            <div class="kpi-card"
+                style="background: #1e293b; padding: 15px; border-radius: 8px; border: 1px solid #334155;">
                 <span style="font-size: 0.85em; color: #94a3b8; display: block; font-weight: bold;">Nazioni</span>
-                <span id="kpi-countries" style="font-size: 1.6em; font-weight: bold; color: #a855f7; display: block; margin-top: 5px;">0</span>
-                <span style="font-size: 0.8em; color: #64748b; display: block; margin-top: 4px;">nel subset filtrato</span>
+                <span id="kpi-countries"
+                    style="font-size: 1.6em; font-weight: bold; color: #a855f7; display: block; margin-top: 5px;">0</span>
+                <span style="font-size: 0.8em; color: #64748b; display: block; margin-top: 4px;">nel subset
+                    filtrato</span>
             </div>
         </div>
 
         <!-- 2. GRAFICO DINAMICO -->
-        <div class="chart-section" style="background: #1e293b; padding: 20px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 20px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+        <div class="chart-section"
+            style="background: #1e293b; padding: 20px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 20px;">
+            <div
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
                 <h3 style="margin: 0; color: #f8fafc; font-size: 1.1em;">📊 Analisi Ripartizione</h3>
                 <div style="display: flex; align-items: center; gap: 10px;">
-                    <label for="paramSelect" style="color: #94a3b8; font-size: 0.9em; font-weight: bold;">Raggruppa per:</label>
-                    <select id="paramSelect" style="background: #0f172a; color: white; border: 1px solid #334155; padding: 6px 12px; border-radius: 6px; font-size: 0.9em; cursor: pointer;">
+                    <label for="paramSelect" style="color: #94a3b8; font-size: 0.9em; font-weight: bold;">Raggruppa
+                        per:</label>
+                    <select id="paramSelect"
+                        style="background: #0f172a; color: white; border: 1px solid #334155; padding: 6px 12px; border-radius: 6px; font-size: 0.9em; cursor: pointer;">
                         <option value="country">Nazione</option>
                         <option value="service">Servizio / Porta</option>
                         <option value="provider">Provider Cloud</option>
@@ -159,7 +187,9 @@
             <div style="height: 260px; position: relative; width: 100%; display: flex; justify-content: center;">
                 <canvas id="analyticsPieChart"></canvas>
             </div>
-            <div id="undefined-stats-info" style="margin-top: 15px; font-size: 0.85em; color: #94a3b8; text-align: center; border-top: 1px solid #334155; padding-top: 10px;"></div>
+            <div id="undefined-stats-info"
+                style="margin-top: 15px; font-size: 0.85em; color: #94a3b8; text-align: center; border-top: 1px solid #334155; padding-top: 10px;">
+            </div>
         </div>
 
         <!-- 3. SEZIONE FILTRI & ESPORTAZIONE -->
@@ -170,29 +200,40 @@
             </p>
 
             <div class="filter-controls" style="display: flex; flex-wrap: wrap; gap: 15px; align-items: flex-end;">
-                <div class="filter-group">
-                    <label for="select-country">Nazione</label>
-                    <select id="select-country"><option value="">Tutte le Nazioni</option></select>
+                <div class="filter-group" id="group-view-scope">
+                    <label for="select-view-scope">Ambito Dati</label>
+                    <select id="select-view-scope"
+                        style="background: #0f172a; color: white; border: 1px solid #334155; padding: 6px; border-radius: 6px;">
+                        <option value="full">Tutto il DB</option>
+                        <option value="current">Solo Sessione Corrente</option>
+                    </select>
                 </div>
 
                 <div class="filter-group">
                     <label for="select-service">Servizio / Porta</label>
-                    <select id="select-service"><option value="">Tutti i Servizi</option></select>
+                    <select id="select-service">
+                        <option value="">Tutti i Servizi</option>
+                    </select>
                 </div>
 
                 <div class="filter-group">
                     <label for="select-provider">Provider / ISP</label>
-                    <select id="select-provider"><option value="">Tutti i Provider</option></select>
+                    <select id="select-provider">
+                        <option value="">Tutti i Provider</option>
+                    </select>
                 </div>
 
                 <div class="filter-group">
                     <label for="select-status">Stato Sessione</label>
-                    <select id="select-status"><option value="">Tutti gli Stati</option></select>
+                    <select id="select-status">
+                        <option value="">Tutti gli Stati</option>
+                    </select>
                 </div>
 
                 <div class="filter-group">
                     <label for="select-time-preset">Intervallo Temporale</label>
-                    <select id="select-time-preset" style="background: #0f172a; color: white; border: 1px solid #334155; padding: 6px; border-radius: 6px;">
+                    <select id="select-time-preset"
+                        style="background: #0f172a; color: white; border: 1px solid #334155; padding: 6px; border-radius: 6px;">
                         <option value="all">Tutto lo storico</option>
                         <option value="1h">Ultima ora</option>
                         <option value="today">Oggi</option>
@@ -206,7 +247,8 @@
                     <div style="display: flex; gap: 5px;">
                         <input type="datetime-local" id="input-date-start" class="date-picker-input">
                         <input type="datetime-local" id="input-date-end" class="date-picker-input">
-                        <button id="btn-apply-date-range" class="btn-back" style="padding: 6px 12px; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer;">Applica</button>
+                        <button id="btn-apply-date-range" class="btn-back"
+                            style="padding: 6px 12px; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer;">Applica</button>
                     </div>
                 </div>
 
@@ -214,12 +256,17 @@
                 <div class="filter-group" style="margin-left: auto;">
                     <label for="export-scope-select">Esportazione Dati</label>
                     <div style="display: flex; gap: 8px;">
-                        <select id="export-scope-select" style="background: #0f172a; color: white; border: 1px solid #334155; padding: 6px; border-radius: 6px; font-size: 0.85em;">
+                        <select id="export-scope-select"
+                            style="background: #0f172a; color: white; border: 1px solid #334155; padding: 6px; border-radius: 6px; font-size: 0.85em;">
                             <option value="current">Vista Corrente (Filtrata)</option>
                             <option value="full">Intero Database SQLite</option>
                         </select>
-                        <button id="btn-export-csv" style="background: #10b981; color: white; border: none; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.85em;">📄 CSV</button>
-                        <button id="btn-export-json" style="background: #6366f1; color: white; border: none; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.85em;">📦 JSON</button>
+                        <button id="btn-export-csv"
+                            style="background: #10b981; color: white; border: none; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.85em;">📄
+                            CSV</button>
+                        <button id="btn-export-json"
+                            style="background: #6366f1; color: white; border: none; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.85em;">📦
+                            JSON</button>
                     </div>
                 </div>
             </div>
@@ -254,21 +301,29 @@
         </div>
 
         <!-- 5. CONTROLLI PAGINAZIONE -->
-        <div class="pagination-bar" style="display: flex; justify-content: space-between; align-items: center; background: #1e293b; padding: 12px 20px; border-radius: 8px; border: 1px solid #334155; margin-top: 15px; color: #94a3b8; font-size: 0.9em;">
+        <div class="pagination-bar"
+            style="display: flex; justify-content: space-between; align-items: center; background: #1e293b; padding: 12px 20px; border-radius: 8px; border: 1px solid #334155; margin-top: 15px; color: #94a3b8; font-size: 0.9em;">
             <div class="pagination-info">
-                Mostrando <span id="pag-start" style="color: white; font-weight: bold;">0</span> - <span id="pag-end" style="color: white; font-weight: bold;">0</span> di <span id="pag-total" style="color: #38bdf8; font-weight: bold;">0</span> connessioni
+                Mostrando <span id="pag-start" style="color: white; font-weight: bold;">0</span> - <span id="pag-end"
+                    style="color: white; font-weight: bold;">0</span> di <span id="pag-total"
+                    style="color: #38bdf8; font-weight: bold;">0</span> connessioni
             </div>
             <div class="pagination-controls" style="display: flex; align-items: center; gap: 12px;">
                 <label for="select-page-limit">Righe per pagina:</label>
-                <select id="select-page-limit" style="background: #0f172a; color: white; border: 1px solid #334155; padding: 5px 8px; border-radius: 4px;">
+                <select id="select-page-limit"
+                    style="background: #0f172a; color: white; border: 1px solid #334155; padding: 5px 8px; border-radius: 4px;">
                     <option value="25">25</option>
                     <option value="50">50</option>
                     <option value="100">100</option>
                 </select>
-                
-                <button id="btn-page-prev" style="background: #334155; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">&laquo; Prev</button>
+
+                <button id="btn-page-prev"
+                    style="background: #334155; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">&laquo;
+                    Prev</button>
                 <span id="page-current-indicator" style="color: white; font-weight: bold;">Pagina 1 di 1</span>
-                <button id="btn-page-next" style="background: #334155; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">Next &raquo;</button>
+                <button id="btn-page-next"
+                    style="background: #334155; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">Next
+                    &raquo;</button>
             </div>
         </div>
     </div>
@@ -287,12 +342,14 @@
                     <input type="checkbox" id="auto-clean-toggle">
                 </label>
             </div>
-            
+
             <div id="timeout-container" class="setting-item" style="display: none; margin-top: 15px;">
-                <label for="cleanup-timeout" style="display: block; margin-bottom: 5px; font-size: 0.9em; color: #94a3b8;">
+                <label for="cleanup-timeout"
+                    style="display: block; margin-bottom: 5px; font-size: 0.9em; color: #94a3b8;">
                     Timeout inattività (secondi):
                 </label>
-                <input type="number" id="cleanup-timeout" value="30" min="5" max="300" style="width: 100%; padding: 6px; background: #1e293b; border: 1px solid #334155; color: white; border-radius: 4px;">
+                <input type="number" id="cleanup-timeout" value="30" min="5" max="300"
+                    style="width: 100%; padding: 6px; background: #1e293b; border: 1px solid #334155; color: white; border-radius: 4px;">
             </div>
         </div>
     </aside>
@@ -302,7 +359,7 @@
         function triggerExport(format) {
             const scopeSelect = document.getElementById('export-scope-select');
             const scope = scopeSelect ? scopeSelect.value : 'current';
-            
+
             if (scope === 'full') {
                 window.analyticsExport.exportFullDatabase(format);
             } else {
@@ -328,4 +385,5 @@
     <script src="/scripts/analyticsExport.js"></script>
     <script src="/scripts/analytics.js"></script>
 </body>
+
 </html>

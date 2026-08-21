@@ -40,7 +40,7 @@ window.analyticsUI = {
 
         // Aggiungi o aggiorna la sessione nel dataset globale
         if (!state.globalChartSessions) state.globalChartSessions = [];
-        
+
         const existingIdx = state.globalChartSessions.findIndex(s => s.sessionId === packetData.sessionId);
         if (existingIdx !== -1) {
             state.globalChartSessions[existingIdx] = {
@@ -124,14 +124,14 @@ window.analyticsUI = {
             header.addEventListener('click', () => {
                 const column = header.getAttribute('data-sort');
                 const state = window.analyticsState;
-                
+
                 if (state.currentSortColumn === column) {
                     state.currentSortOrder = state.currentSortOrder === 'asc' ? 'desc' : 'asc';
                 } else {
                     state.currentSortColumn = column;
                     state.currentSortOrder = (column === 'total_bytes' || column === 'last_seen') ? 'desc' : 'asc';
                 }
-                
+
                 this.updateSortIcons();
                 this.applyFiltersAndRender(true);
             });
@@ -178,12 +178,12 @@ window.analyticsUI = {
 
             state.existingDropdownOptions[key] = distinctSet;
 
-            const sortedValues = Array.from(distinctSet).sort((a, b) => 
+            const sortedValues = Array.from(distinctSet).sort((a, b) =>
                 a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true })
             );
 
             selectEl.innerHTML = '';
-            
+
             const defaultOpt = document.createElement('option');
             defaultOpt.value = '';
             defaultOpt.textContent = `Tutti (${this.getCategoryLabel(key)})`;
@@ -222,7 +222,7 @@ window.analyticsUI = {
             const distinctSet = state.existingDropdownOptions[key];
             if (!distinctSet.has(strVal)) {
                 distinctSet.add(strVal);
-                
+
                 const selectEl = document.getElementById(`select-${key}`);
                 if (selectEl && document.activeElement !== selectEl) {
                     const opt = document.createElement('option');
@@ -308,17 +308,23 @@ window.analyticsUI = {
      */
     applyFiltersAndRender(forceChartUpdate = false) {
         const state = window.analyticsState;
+        const exp = window.analyticsExport;
         if (!state) return;
 
         this.renderFilterChips();
         this.updateChartDropdownOptions();
 
-        const dataset = state.globalChartSessions || [];
+        let dataset = state.globalChartSessions || [];
 
-        // 1. Filtra l'intero dataset
+        // Se siamo in Real Time e l'utente seleziona "Solo Sessione Corrente"
+        if (exp && !exp.isImportedMode && state.viewScope === 'current') {
+            dataset = dataset.filter(session => session.is_current_session === true);
+        }
+
+        // 1. Filtra l'intero dataset per i filtri attivi (country, service, provider, status)
         let fullFilteredDataset = dataset.filter(session => {
             if (state.activeFilters.country && session.country !== state.activeFilters.country) return false;
-            if (state.activeFilters.service && session.service !== session.activeFilters.service && session.service !== state.activeFilters.service) return false;
+            if (state.activeFilters.service && session.service !== state.activeFilters.service) return false;
             if (state.activeFilters.provider && session.provider !== state.activeFilters.provider) return false;
             if (state.activeFilters.status && session.status !== state.activeFilters.status) return false;
             return true;

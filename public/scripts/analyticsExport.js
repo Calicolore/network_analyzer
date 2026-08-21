@@ -139,6 +139,10 @@ window.analyticsExport = {
             window.analyticsState.isRealtimePaused = true;
         }
 
+        // Nascondi il selettore dell'ambito dati in modalità importata
+        const viewScopeGroup = document.getElementById('group-view-scope');
+        if (viewScopeGroup) viewScopeGroup.style.display = 'none';
+
         const statusBadge = document.getElementById('mode-status-badge');
         const resetImportBtn = document.getElementById('btn-reset-import');
 
@@ -165,6 +169,8 @@ window.analyticsExport = {
 
         if (window.analyticsState) {
             window.analyticsState.isRealtimePaused = false;
+            // ripristina la vista completa del DB al ritorno in live
+            window.analyticsState.viewScope = 'full';
         }
 
         const statusBadge = document.getElementById('mode-status-badge');
@@ -177,6 +183,15 @@ window.analyticsExport = {
         }
         if (resetImportBtn) resetImportBtn.style.display = 'none';
         if (selectDb) selectDb.selectedIndex = 0;
+
+        // Ripristina la visibilità del selettore in modalità Real Time e sincronizza il valore scelto
+        const viewScopeGroup = document.getElementById('group-view-scope');
+        const selectViewScope = document.getElementById('select-view-scope');
+
+        if (viewScopeGroup) viewScopeGroup.style.display = 'flex';
+        if (selectViewScope && window.analyticsState) {
+            selectViewScope.value = window.analyticsState.viewScope || 'full';
+        }
 
         if (window.analyticsApi && typeof window.analyticsApi.loadSessionsData === 'function') {
             window.analyticsApi.loadSessionsData();
@@ -221,7 +236,7 @@ window.analyticsExport = {
 
     exportCurrentSession(format = 'csv') {
         const data = window.filteredConnections || window.analyticsState?.globalChartSessions || [];
-        
+
         if (data.length === 0) {
             return alert('Nessun dato presente nella sessione corrente da esportare.');
         }
@@ -241,7 +256,7 @@ window.analyticsExport = {
         try {
             const response = await fetch('/api/sessions?exportAll=true');
             if (!response.ok) throw new Error('Errore nel recupero dati dal server');
-            
+
             const result = await response.json();
             const data = result.data || [];
 
@@ -266,11 +281,11 @@ window.analyticsExport = {
 
     jsonToCSV(items) {
         if (!items || !items.length) return '';
-        
+
         const headers = Object.keys(items[0]);
         const headerRow = headers.join(',');
 
-        const bodyRows = items.map(item => 
+        const bodyRows = items.map(item =>
             headers.map(header => {
                 const val = item[header] ?? '';
                 const escaped = String(val).replace(/"/g, '""');
@@ -285,12 +300,12 @@ window.analyticsExport = {
         const blob = new Blob([content], { type: contentType });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        
+
         a.href = url;
         a.download = fileName;
         document.body.appendChild(a);
         a.click();
-        
+
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
     }

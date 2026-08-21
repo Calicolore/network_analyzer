@@ -76,6 +76,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (packetData.provider) existingGlobal.provider = packetData.provider;
             if (packetData.service) existingGlobal.service = packetData.service;
             existingGlobal.status = 'active';
+            existingGlobal.is_current_session = true;
         } else {
             const newGlobalSession = {
                 session_id: packetData.sessionId,
@@ -90,13 +91,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 total_bytes: calculatedBytes,
                 first_seen: packetData.time,
                 last_seen: packetData.time,
-                status: 'active'
+                status: 'active',
+                is_current_session: true
             };
             state.globalChartSessions.unshift(newGlobalSession);
         }
 
         ui.updateDropdownsWithNewItem(packetData);
         scheduleRender();
+    });
+
+    // Listener per il cambio dell'ambito dati
+    document.getElementById('select-view-scope')?.addEventListener('change', (e) => {
+        state.viewScope = e.target.value;
+        state.currentPage = 1;
+        ui.applyFiltersAndRender(true);
     });
 
     socket.on('session_closed', (data) => {

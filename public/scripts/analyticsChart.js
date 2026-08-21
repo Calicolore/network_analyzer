@@ -6,7 +6,7 @@
 let analyticsPieChart = null;
 
 const CHART_COLORS = [
-    '#38bdf8', '#3b82f6', '#818cf8', '#a855f7', 
+    '#38bdf8', '#3b82f6', '#818cf8', '#a855f7',
     '#ec4899', '#f43f5e', '#10b981', '#f59e0b',
     '#06b6d4', '#6366f1', '#d946ef', '#84cc16', '#64748b'
 ];
@@ -49,7 +49,7 @@ function updateAnalyticsDashboard(filteredData = [], totalData = []) {
     // 2. KPI Traffico
     const filteredBytes = filteredData.reduce((acc, row) => acc + (Number(row.total_bytes) || 0), 0);
     const totalBytes = totalData.reduce((acc, row) => acc + (Number(row.total_bytes) || 0), 0);
-    
+
     const bwElem = document.getElementById('kpi-bandwidth');
     const bwSubElem = document.getElementById('kpi-bandwidth-subtext');
     if (bwElem && bwSubElem) {
@@ -110,7 +110,7 @@ function renderAnalyticsChart(data = []) {
     if (undefinedInfoElem) {
         if (undefinedCount > 0) {
             const paramLabel = selectedParam === 'country' ? 'Nazione non definita ("??")' :
-                               selectedParam === 'provider' ? 'Provider non definito' : 'Valore non definito';
+                selectedParam === 'provider' ? 'Provider non definito' : 'Valore non definito';
             undefinedInfoElem.innerHTML = `⚠️ <strong>${undefinedCount}</strong> connessioni con <em>${paramLabel}</em> escluse dal grafico (percentuali calcolate sulle <strong>${validTotalCount}</strong> connessioni valide).`;
         } else {
             undefinedInfoElem.innerHTML = `✅ Tutte le <strong>${totalCount}</strong> connessioni filtrate hanno un parametro valido.`;
@@ -127,7 +127,7 @@ function renderAnalyticsChart(data = []) {
     }
 
     // Soglia percentuale per "Altro" (2%) calcolata SOLO sulle connessioni valide
-    const THRESHOLD_PERCENT = 2.0; 
+    const THRESHOLD_PERCENT = 2.0;
     const counts = {};
     let altroCount = 0;
 
@@ -157,8 +157,8 @@ function renderAnalyticsChart(data = []) {
         analyticsPieChart.data.labels = labels;
         analyticsPieChart.data.datasets[0].data = values;
         analyticsPieChart.data.datasets[0].backgroundColor = bgColors;
-        
-        analyticsPieChart.options.plugins.tooltip.callbacks.label = function(context) {
+
+        analyticsPieChart.options.plugins.tooltip.callbacks.label = function (context) {
             const count = context.raw;
             const percentage = ((count / validTotalCount) * 100).toFixed(1);
             return ` ${context.label}: ${count} con. (${percentage}%)`;
@@ -188,7 +188,7 @@ function renderAnalyticsChart(data = []) {
             plugins: {
                 tooltip: {
                     callbacks: {
-                        label: function(context) {
+                        label: function (context) {
                             const count = context.raw;
                             const percentage = ((count / validTotalCount) * 100).toFixed(1);
                             return ` ${context.label}: ${count} con. (${percentage}%)`;

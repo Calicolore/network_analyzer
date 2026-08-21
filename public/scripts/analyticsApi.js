@@ -5,6 +5,7 @@
 window.analyticsState = {
     allSessions: [],            // Sessioni della pagina corrente (per la tabella)
     globalChartSessions: [],    // TUTTE le sessioni dell'intero DB (per grafico e filtri)
+    viewScope: 'full',          // 'full' (Tutto il DB) oppure 'current' (Solo Sessione Corrente)
     currentSortColumn: 'last_seen',
     currentSortOrder: 'desc',
     currentLimit: 25,
@@ -69,14 +70,14 @@ window.analyticsApi = {
     async fetchAllFilteredForExport() {
         const state = window.analyticsState;
         let url = `/api/sessions?exportAll=true&limit=99999&timePreset=${state.currentTimePreset}`;
-        
+
         if (state.currentTimePreset === 'custom' && state.customStart && state.customEnd) {
             url += `&startDate=${encodeURIComponent(state.customStart)}&endDate=${encodeURIComponent(state.customEnd)}`;
         }
-        
+
         const res = await fetch(url);
         if (!res.ok) throw new Error('Impossibile scaricare i dati dal server');
-        
+
         const result = await res.json();
         return Array.isArray(result) ? result : (result.data || []);
     }
