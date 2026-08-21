@@ -24,8 +24,27 @@
         <h1 style="margin: 0; font-size: 1.5em; border: none; padding: 0;">Network Analyzer</h1>
         
         <div style="display: flex; gap: 10px; align-items: center;">
+            <!-- BADGE DI STATO MODALITÀ (REAL TIME / IMPORTED) -->
+            <span id="mode-status-badge" style="background: #10b981; color: white; padding: 5px 10px; border-radius: 12px; font-size: 0.8em; font-weight: bold; text-transform: uppercase;">
+                🔴 REAL TIME
+            </span>
+
+            <!-- SELETTORE / GESTIONE DB IMPORTATI -->
+            <div style="position: relative; display: flex; align-items: center; gap: 5px;">
+                <input type="file" id="input-header-import-file" accept=".json, .csv" style="display: none;">
+                
+                <select id="select-imported-db" style="background: #334155; color: white; border: 1px solid #475569; padding: 6px 10px; border-radius: 6px; font-size: 0.85em; font-weight: bold; cursor: pointer;">
+                    <option value="" disabled selected>📂 DB Importati</option>
+                    <option value="__NEW__">➕ Importa nuovo DB (JSON/CSV)...</option>
+                </select>
+
+                <button id="btn-reset-import" style="display: none; background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.8em;">
+                    ✖ Torna a Real Time
+                </button>
+            </div>
+
             <button id="nav-btn-live" class="nav-link active" style="background: #334155; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.9em;">
-                🌐 Live Traffic
+                🌐 Real Time Traffic
             </button>
             <button id="nav-btn-analytics" class="nav-link" style="background: #334155; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.9em;">
                 📊 Analytics & Filtri DB
@@ -37,17 +56,15 @@
     </header>
 
     <!-- =================================================================== -->
-    <!-- VISTA 1: TEMPO REALE (MAPPA, GRAFICO E CARDS LIVE)                 -->
+    <!-- VISTA 1: TEMPO REALE (MAPPA, GRAFICO E CARDS REAL TIME)                 -->
     <!-- =================================================================== -->
     <div id="view-live" class="spa-view">
         
-        <!-- CONTENITORE MAPPA RIDIMENSIONABILE -->
         <div id="map-container" style="margin-top: 20px;">
             <div id="map"></div>
             <div id="map-resize-handle" class="resize-handle"></div>
         </div>
 
-        <!-- INTESTAZIONE SEZIONE GRAFICO BANDWIDTH -->
         <div class="section-header" style="display: flex; justify-content: space-between; align-items: center;">
             <div style="display: flex; align-items: center; gap: 15px;">
                 <h2 style="margin: 0;">📊 Consumo di Banda</h2>
@@ -67,14 +84,12 @@
             </button>
         </div>
 
-        <!-- GRAFICO DEL TRAFFICO GLOBALE -->
         <div id="bandwidth-container" class="chart-container-box">
             <div class="chart-wrapper" style="height: 280px; position: relative; width: 100%;">
                 <canvas id="bandwidthChart"></canvas>
             </div>
         </div>
 
-        <!-- INTESTAZIONE SEZIONE COMUNICAZIONI ATTIVE -->
         <div class="section-header">
             <h2>Comunicazioni Attive</h2>
             <button id="toggle-dashboard-btn" class="accordion-btn" title="Nascondi/Mostra Connessioni">
@@ -83,7 +98,6 @@
             </button>
         </div>
 
-        <!-- BARRA DI RICERCA E FILTRI LIVE -->
         <div class="search-filter-bar">
             <div class="search-box">
                 <input type="text" id="domainSearchInput" placeholder="🔍 Cerca dominio (es. youtube, google, x)..." autocomplete="off" />
@@ -102,7 +116,6 @@
             </div>
         </div>
 
-        <!-- CONTENITORE DASHBOARD CARDS LIVE -->
         <div id="dashboard"></div>
     </div>
 
@@ -111,7 +124,7 @@
     <!-- =================================================================== -->
     <div id="view-analytics" class="spa-view hidden" style="margin-top: 20px;">
         
-        <!-- 1. BLOCCO STATISTICHE KPI -->
+        <!-- 1. STATISTICHE KPI -->
         <div class="kpi-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 20px;">
             <div class="kpi-card" style="background: #1e293b; padding: 15px; border-radius: 8px; border: 1px solid #334155;">
                 <span style="font-size: 0.85em; color: #94a3b8; display: block; font-weight: bold;">Connessioni</span>
@@ -130,7 +143,7 @@
             </div>
         </div>
 
-        <!-- 2. BLOCCO GRAFICO DINAMICO -->
+        <!-- 2. GRAFICO DINAMICO -->
         <div class="chart-section" style="background: #1e293b; padding: 20px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 20px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
                 <h3 style="margin: 0; color: #f8fafc; font-size: 1.1em;">📊 Analisi Ripartizione</h3>
@@ -146,11 +159,10 @@
             <div style="height: 260px; position: relative; width: 100%; display: flex; justify-content: center;">
                 <canvas id="analyticsPieChart"></canvas>
             </div>
-            <!-- CONTENITORE INFO NON DEFINITI -->
             <div id="undefined-stats-info" style="margin-top: 15px; font-size: 0.85em; color: #94a3b8; text-align: center; border-top: 1px solid #334155; padding-top: 10px;"></div>
         </div>
 
-        <!-- 3. SEZIONE FILTRI DINAMICI & ESPORTAZIONE -->
+        <!-- 3. SEZIONE FILTRI & ESPORTAZIONE -->
         <div class="filter-section">
             <h3>🔍 Selezione Filtri Database & Esportazione</h3>
             <p style="color: #94a3b8; font-size: 0.9em; margin-bottom: 10px;">
@@ -158,7 +170,6 @@
             </p>
 
             <div class="filter-controls" style="display: flex; flex-wrap: wrap; gap: 15px; align-items: flex-end;">
-                <!-- Filtri di Categoria -->
                 <div class="filter-group">
                     <label for="select-country">Nazione</label>
                     <select id="select-country"><option value="">Tutte le Nazioni</option></select>
@@ -179,7 +190,6 @@
                     <select id="select-status"><option value="">Tutti gli Stati</option></select>
                 </div>
 
-                <!-- Filtro Temporale Rapido -->
                 <div class="filter-group">
                     <label for="select-time-preset">Intervallo Temporale</label>
                     <select id="select-time-preset" style="background: #0f172a; color: white; border: 1px solid #334155; padding: 6px; border-radius: 6px;">
@@ -191,7 +201,6 @@
                     </select>
                 </div>
 
-                <!-- Date Range Personalizzato -->
                 <div id="custom-date-group" class="filter-group" style="display: none;">
                     <label>Inizio / Fine</label>
                     <div style="display: flex; gap: 5px;">
@@ -201,17 +210,20 @@
                     </div>
                 </div>
 
-                <!-- Pulsanti Esportazione Dati -->
+                <!-- AMBITO DI ESPORTAZIONE E BOTTONI -->
                 <div class="filter-group" style="margin-left: auto;">
-                    <label>Esporta Dati Filtrati</label>
+                    <label for="export-scope-select">Esportazione Dati</label>
                     <div style="display: flex; gap: 8px;">
+                        <select id="export-scope-select" style="background: #0f172a; color: white; border: 1px solid #334155; padding: 6px; border-radius: 6px; font-size: 0.85em;">
+                            <option value="current">Vista Corrente (Filtrata)</option>
+                            <option value="full">Intero Database SQLite</option>
+                        </select>
                         <button id="btn-export-csv" style="background: #10b981; color: white; border: none; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.85em;">📄 CSV</button>
                         <button id="btn-export-json" style="background: #6366f1; color: white; border: none; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.85em;">📦 JSON</button>
                     </div>
                 </div>
             </div>
 
-            <!-- CHIPS FILTRI ATTIVI -->
             <div class="active-filters-container" id="active-filters-box" style="margin-top: 15px;">
                 <span style="font-size: 0.85em; color: #94a3b8;">Filtri attivi:</span>
                 <em id="no-filters-text" style="color: #64748b; font-size: 0.85em;">Nessuno</em>
@@ -241,7 +253,7 @@
             </table>
         </div>
 
-        <!-- 5. BARRA CONTROLLI PAGINAZIONE SQL -->
+        <!-- 5. CONTROLLI PAGINAZIONE -->
         <div class="pagination-bar" style="display: flex; justify-content: space-between; align-items: center; background: #1e293b; padding: 12px 20px; border-radius: 8px; border: 1px solid #334155; margin-top: 15px; color: #94a3b8; font-size: 0.9em;">
             <div class="pagination-info">
                 Mostrando <span id="pag-start" style="color: white; font-weight: bold;">0</span> - <span id="pag-end" style="color: white; font-weight: bold;">0</span> di <span id="pag-total" style="color: #38bdf8; font-weight: bold;">0</span> connessioni
@@ -261,7 +273,7 @@
         </div>
     </div>
 
-    <!-- SIDEBAR IMPOSTAZIONI ED OVERLAY -->
+    <!-- SIDEBAR IMPOSTAZIONI -->
     <div id="sidebar-overlay" class="overlay"></div>
     <aside id="settings-sidebar" class="sidebar">
         <div class="sidebar-header">
@@ -285,7 +297,21 @@
         </div>
     </aside>
 
-    <!-- DIPENDENZE ED ESECUZIONE MODULI CLIENT -->
+    <script>
+        // Funzione helper per l'esportazione dinamica
+        function triggerExport(format) {
+            const scopeSelect = document.getElementById('export-scope-select');
+            const scope = scopeSelect ? scopeSelect.value : 'current';
+            
+            if (scope === 'full') {
+                window.analyticsExport.exportFullDatabase(format);
+            } else {
+                window.analyticsExport.exportCurrentSession(format);
+            }
+        }
+    </script>
+
+    <!-- DIPENDENZE ED ESECUZIONE MODULI -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="/socket.io/socket.io.js"></script>

@@ -1,10 +1,13 @@
 /**
  * Modulo UI - Rendering, Tabelle, KPI e Filtri Grafici (analyticsUI.js)
+ * Implementa la Protezione dall'aggiornamento Real-Time (Pausa, Paginazione, Throttling DOM e Dropdown Focus)
  */
 
 window.analyticsUI = {
     lastChartUpdateTime: 0,
+    lastTableUpdateTime: 0,
     CHART_THROTTLE_MS: 500,
+    TABLE_THROTTLE_MS: 300,
 
     formatBytes(bytes) {
         if (!bytes || bytes === 0) return '0 B';
@@ -19,6 +22,57 @@ window.analyticsUI = {
         return labels[key] || key;
     },
 
+    /**
+     * Processa un singolo pacchetto real-time applicando le protezioni:
+     * 1. Pausa Real-Time (isRealtimePaused)
+     * 2. Protezione Paginazione (Aggiorna il DB in memoria ma re-renderizza la tabella solo se in Pagina 1)
+     * 3. Throttling per evitare lag del DOM
+     */
+    processRealtimePacket(packetData) {
+        const state = window.analyticsState;
+        if (!state) return;
+
+        // Protezione 1: Se lo stream real-time è in pausa, ignora l'aggiornamento dell'interfaccia
+        if (state.isRealtimePaused) return;
+
+        // Aggiorna opzioni dei dropdown senza interrompere l'utente se ha il focus attivo
+        this.updateDropdownsWithNewItem(packetData);
+
+        // Aggiungi o aggiorna la sessione nel dataset globale
+        if (!state.globalChartSessions) state.globalChartSessions = [];
+        
+        const existingIdx = state.globalChartSessions.findIndex(s => s.sessionId === packetData.sessionId);
+        if (existingIdx !== -1) {
+            state.globalChartSessions[existingIdx] = {
+                ...state.globalChartSessions[existingIdx],
+                ...packetData,
+                total_bytes: (Number(packetData.size) || 0) + (Number(state.globalChartSessions[existingIdx].total_bytes) || 0),
+                last_seen: packetData.time || state.globalChartSessions[existingIdx].last_seen
+            };
+        } else {
+            state.globalChartSessions.unshift({
+                ...packetData,
+                total_bytes: Number(packetData.size) || 0,
+                last_seen: packetData.time
+            });
+        }
+
+        // Protezione 2 & 3: Throttling temporale del rendering
+        const now = Date.now();
+        if (now - this.lastTableUpdateTime >= this.TABLE_THROTTLE_MS) {
+            this.lastTableUpdateTime = now;
+            this.applyFiltersAndRender(false);
+        }
+    },
+
+    /**
+     * Elabora i batch di pacchetti provenienti dal WebSocket backend (app.js)
+     */
+    processRealtimeBatch(batch) {
+        if (!Array.isArray(batch) || batch.length === 0) return;
+        batch.forEach(pkt => this.processRealtimePacket(pkt));
+    },
+
     updateGlobalKpiUI(filteredDataset) {
         const state = window.analyticsState;
         const kpiConn = document.getElementById('kpi-connections');
@@ -27,7 +81,7 @@ window.analyticsUI = {
         const kpiSub = document.getElementById('kpi-bandwidth-subtext');
         const kpiCountries = document.getElementById('kpi-countries');
 
-        const dataset = filteredDataset || state.globalChartSessions;
+        const dataset = filteredDataset || state.globalChartSessions || [];
 
         const totalConnections = dataset.length;
         const totalBytes = dataset.reduce((acc, s) => acc + (Number(s.total_bytes) || 0), 0);
@@ -112,7 +166,7 @@ window.analyticsUI = {
             const currentSelected = state.activeFilters[key] || selectEl.value || '';
             const distinctSet = new Set();
 
-            dataset.forEach(item => {
+            (dataset || []).forEach(item => {
                 const val = item[key];
                 if (val !== null && val !== undefined) {
                     const strVal = String(val).trim();
@@ -147,6 +201,10 @@ window.analyticsUI = {
         });
     },
 
+    /**
+     * Protezione Dropdown: Aggiunge opzioni dinamiche solo se l'utente non sta 
+     * attualmente interagendo con il select (evita chiusure/reset del menu).
+     */
     updateDropdownsWithNewItem(packetData) {
         const state = window.analyticsState;
         const fields = ['country', 'service', 'provider', 'status'];
@@ -158,12 +216,15 @@ window.analyticsUI = {
             const strVal = String(val).trim();
             if (strVal === '' || strVal === 'N/A' || strVal === 'Sconosciuta') return;
 
+            if (!state.existingDropdownOptions) state.existingDropdownOptions = {};
+            if (!state.existingDropdownOptions[key]) state.existingDropdownOptions[key] = new Set();
+
             const distinctSet = state.existingDropdownOptions[key];
-            if (distinctSet && !distinctSet.has(strVal)) {
+            if (!distinctSet.has(strVal)) {
                 distinctSet.add(strVal);
                 
                 const selectEl = document.getElementById(`select-${key}`);
-                if (selectEl) {
+                if (selectEl && document.activeElement !== selectEl) {
                     const opt = document.createElement('option');
                     opt.value = strVal;
                     opt.textContent = strVal;
@@ -181,7 +242,7 @@ window.analyticsUI = {
         const state = window.analyticsState;
         activeFiltersBox.querySelectorAll('.filter-chip').forEach(chip => chip.remove());
 
-        const keysWithValues = Object.keys(state.activeFilters).filter(k => state.activeFilters[k] !== '');
+        const keysWithValues = Object.keys(state.activeFilters || {}).filter(k => state.activeFilters[k] !== '');
 
         if (keysWithValues.length === 0) {
             if (noFiltersText) noFiltersText.style.display = 'inline';
@@ -217,7 +278,7 @@ window.analyticsUI = {
 
         Array.from(paramSelect.options).forEach(option => {
             const val = option.value;
-            const isFiltered = Boolean(state.activeFilters[val]);
+            const isFiltered = Boolean(state.activeFilters && state.activeFilters[val]);
 
             if (isFiltered) {
                 if (!option.disabled) {
@@ -242,17 +303,22 @@ window.analyticsUI = {
     },
 
     /**
-     * Filtra l'INTERO DATABASE per il grafico e suddivide in pagine per la tabella
+     * Filtra l'INTERO DATABASE per il grafico e suddivide in pagine per la tabella.
+     * Applica la Protezione Paginazione Real-Time.
      */
     applyFiltersAndRender(forceChartUpdate = false) {
         const state = window.analyticsState;
+        if (!state) return;
+
         this.renderFilterChips();
         this.updateChartDropdownOptions();
 
-        // 1. Filtra l'intero dataset del database
-        let fullFilteredDataset = state.globalChartSessions.filter(session => {
+        const dataset = state.globalChartSessions || [];
+
+        // 1. Filtra l'intero dataset
+        let fullFilteredDataset = dataset.filter(session => {
             if (state.activeFilters.country && session.country !== state.activeFilters.country) return false;
-            if (state.activeFilters.service && session.service !== state.activeFilters.service) return false;
+            if (state.activeFilters.service && session.service !== session.activeFilters.service && session.service !== state.activeFilters.service) return false;
             if (state.activeFilters.provider && session.provider !== state.activeFilters.provider) return false;
             if (state.activeFilters.status && session.status !== state.activeFilters.status) return false;
             return true;
@@ -276,20 +342,20 @@ window.analyticsUI = {
             return 0;
         });
 
-        // 3. IMPOSTA L'INTERO DATASET FILTRATO COME RIFERIMENTO GLOBALE PER I GRAFICI
+        // 3. Riferimento globale per i grafici
         window.filteredConnections = fullFilteredDataset;
 
-        // 4. Calcola la paginazione basata sull'intero DB filtrato
+        // 4. Calcola la paginazione
         state.totalItems = fullFilteredDataset.length;
         state.totalPages = Math.max(1, Math.ceil(state.totalItems / state.currentLimit));
         if (state.currentPage > state.totalPages) state.currentPage = state.totalPages;
 
-        // 5. Estrai la porzione di elementi SOLO per la tabella della pagina corrente
+        // 5. Estrai la porzione di elementi per la tabella della pagina corrente
         const startIdx = (state.currentPage - 1) * state.currentLimit;
         const pageTableData = fullFilteredDataset.slice(startIdx, startIdx + state.currentLimit);
         state.allSessions = pageTableData;
 
-        // 6. Invia l'INTERO dataset filtrato al Grafico a Torta
+        // 6. Invia al Grafico a Torta (con throttling temporale)
         const now = Date.now();
         if (forceChartUpdate || (now - this.lastChartUpdateTime >= this.CHART_THROTTLE_MS)) {
             if (typeof updateAnalyticsDashboard === 'function') {
@@ -298,17 +364,24 @@ window.analyticsUI = {
             }
         }
 
-        // 7. Aggiorna Tabella, Paginazione e KPI
-        this.renderTable(pageTableData);
+        // 7. Aggiorna KPI e Paginazione sempre
         this.updatePaginationUI();
         this.updateGlobalKpiUI(fullFilteredDataset);
+
+        // 8. PROTEZIONE PAGINAZIONE REAL-TIME PER LA TABELLA:
+        // Se è un aggiornamento automatico da streaming real-time e l'utente NON è su Pagina 1
+        // (es. sta analizzando Pagina 2 o successive), aggiorniamo i dati in background ma 
+        // NON ridisegniamo le righe della tabella per evitare slittamenti e glitch visivi.
+        if (forceChartUpdate || state.currentPage === 1) {
+            this.renderTable(pageTableData);
+        }
     },
 
     renderTable(data) {
         const tableBody = document.getElementById('connections-table-body');
         if (!tableBody) return;
 
-        if (data.length === 0) {
+        if (!data || data.length === 0) {
             tableBody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:#94a3b8;">Nessuna connessione corrisponde ai filtri selezionati.</td></tr>`;
             return;
         }

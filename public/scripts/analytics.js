@@ -35,7 +35,10 @@ document.addEventListener('DOMContentLoaded', () => {
             btnAnalytics.classList.add('active');
             btnLive.classList.remove('active');
 
-            api.loadSessionsData();
+            // Ricarica il DB reale solo se NON siamo in modalità importata
+            if (!exp.isImportedMode) {
+                api.loadSessionsData();
+            }
         });
     }
 
@@ -59,6 +62,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     socket.on('new_packet', (packetData) => {
+        // Se siamo in modalità DB Importato, blocca l'inserimento dei pacchetti real-time
+        if (exp && exp.isImportedMode) return;
+
         const calculatedBytes = Math.round(parseFloat(packetData.totalKB || 0) * 1024) || packetData.size || 0;
 
         // 1. Aggiorna dataset globale per grafico e filtri
@@ -89,13 +95,13 @@ document.addEventListener('DOMContentLoaded', () => {
             state.globalChartSessions.unshift(newGlobalSession);
         }
 
-        // 2. Aggiungi il valore ai dropdown se nuovo
         ui.updateDropdownsWithNewItem(packetData);
-
         scheduleRender();
     });
 
     socket.on('session_closed', (data) => {
+        if (exp && exp.isImportedMode) return;
+
         const existingGlobal = state.globalChartSessions.find(s => s.session_id === data.sessionId);
         if (existingGlobal) {
             existingGlobal.status = data.reason === 'Idle Timeout' ? 'idle' : 'closed';
@@ -112,7 +118,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Event listener per il cambio parametro grafico (es. Nazione -> Servizio)
     document.getElementById('paramSelect')?.addEventListener('change', () => {
         ui.applyFiltersAndRender(true);
     });
@@ -125,7 +130,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (customGroup) {
                 customGroup.style.display = state.currentTimePreset === 'custom' ? 'flex' : 'none';
             }
-            if (state.currentTimePreset !== 'custom') {
+            if (state.currentTimePreset !== 'custom' && !exp.isImportedMode) {
                 state.currentPage = 1;
                 api.loadSessionsData();
             }
@@ -135,7 +140,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btn-apply-date-range')?.addEventListener('click', () => {
         state.customStart = document.getElementById('input-date-start')?.value || '';
         state.customEnd = document.getElementById('input-date-end')?.value || '';
-        if (state.customStart && state.customEnd) {
+        if (state.customStart && state.customEnd && !exp.isImportedMode) {
             state.currentPage = 1;
             api.loadSessionsData();
         }
@@ -161,11 +166,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // === 5. ESPORTAZIONE ===
-    document.getElementById('btn-export-csv')?.addEventListener('click', () => exp.exportToCsv());
-    document.getElementById('btn-export-json')?.addEventListener('click', () => exp.exportToJson());
-
-    // === 6. INIZIALIZZAZIONE ===
+    // === 5. INIZIALIZZAZIONE ===
     ui.initSortingHeaders();
     api.loadSessionsData();
 });
