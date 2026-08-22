@@ -22,57 +22,6 @@ window.analyticsUI = {
         return labels[key] || key;
     },
 
-    /**
-     * Processa un singolo pacchetto real-time applicando le protezioni:
-     * 1. Pausa Real-Time (isRealtimePaused)
-     * 2. Protezione Paginazione (Aggiorna il DB in memoria ma re-renderizza la tabella solo se in Pagina 1)
-     * 3. Throttling per evitare lag del DOM
-     */
-    processRealtimePacket(packetData) {
-        const state = window.analyticsState;
-        if (!state) return;
-
-        // Protezione 1: Se lo stream real-time è in pausa, ignora l'aggiornamento dell'interfaccia
-        if (state.isRealtimePaused) return;
-
-        // Aggiorna opzioni dei dropdown senza interrompere l'utente se ha il focus attivo
-        this.updateDropdownsWithNewItem(packetData);
-
-        // Aggiungi o aggiorna la sessione nel dataset globale
-        if (!state.globalChartSessions) state.globalChartSessions = [];
-
-        const existingIdx = state.globalChartSessions.findIndex(s => s.sessionId === packetData.sessionId);
-        if (existingIdx !== -1) {
-            state.globalChartSessions[existingIdx] = {
-                ...state.globalChartSessions[existingIdx],
-                ...packetData,
-                total_bytes: (Number(packetData.size) || 0) + (Number(state.globalChartSessions[existingIdx].total_bytes) || 0),
-                last_seen: packetData.time || state.globalChartSessions[existingIdx].last_seen
-            };
-        } else {
-            state.globalChartSessions.unshift({
-                ...packetData,
-                total_bytes: Number(packetData.size) || 0,
-                last_seen: packetData.time
-            });
-        }
-
-        // Protezione 2 & 3: Throttling temporale del rendering
-        const now = Date.now();
-        if (now - this.lastTableUpdateTime >= this.TABLE_THROTTLE_MS) {
-            this.lastTableUpdateTime = now;
-            this.applyFiltersAndRender(false);
-        }
-    },
-
-    /**
-     * Elabora i batch di pacchetti provenienti dal WebSocket backend (app.js)
-     */
-    processRealtimeBatch(batch) {
-        if (!Array.isArray(batch) || batch.length === 0) return;
-        batch.forEach(pkt => this.processRealtimePacket(pkt));
-    },
-
     updateGlobalKpiUI(filteredDataset) {
         const state = window.analyticsState;
         const kpiConn = document.getElementById('kpi-connections');
