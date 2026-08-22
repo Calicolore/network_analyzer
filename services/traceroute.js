@@ -22,6 +22,7 @@
 
 const { exec } = require('child_process');
 const geoip = require('geoip-lite');
+const { upsertHop } = require('../database/dbService');
 
 // Registro globale per evitare l'esecuzione di traceroute duplicati ed essere sicuri
 // di lanciare una sola analisi per ciascun IP di destinazione
@@ -74,9 +75,8 @@ function runNativeTraceroute(targetIp, io) {
                 const geo = geoip.lookup(hopIp);
                 if (geo && geo.ll) {
                     console.log(`[TRACEROUTE] Hop #${hopCount} Rilevato: ${hopIp} (${geo.city || geo.country})`);
-                    
-                    // Invio immediato del nodo alla mappa nella dashboard
-                    io.emit('traceroute_hop', {
+
+                    const hopData = {
                         targetIp: targetIp,
                         hopNumber: hopCount,
                         ip: hopIp,
@@ -85,7 +85,14 @@ function runNativeTraceroute(targetIp, io) {
                         country: geo.country,
                         city: geo.city || 'Nodo di Rete',
                         provider: hopProvider
-                    });
+                    };
+
+                    // Invio immediato del nodo alla mappa nella dashboard (tempo reale)
+                    io.emit('traceroute_hop', hopData);
+
+                    // Persistenza su DB: consente di ricostruire il percorso quando il DB viene esportato/importato
+                    upsertHop(hopData);
+
                     hopCount++;
                 }
             }

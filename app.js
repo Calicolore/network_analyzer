@@ -63,6 +63,7 @@ const FLUSH_INTERVAL_MS = 100; // Invia i pacchetti accumulati ogni 100ms
 setInterval(() => {
     if (packetBuffer.length > 0) {
         const batch = packetBuffer.splice(0, packetBuffer.length);
+        // Nome evento allineato al listener 'packet_batch' lato client (dashboard.js)
         io.emit('packet_batch', batch);
         // Retrocompatibilità per eventuali listener client che ascoltano eventi singoli
         batch.forEach(pkt => io.emit('new_packet', pkt));
@@ -184,6 +185,8 @@ initSniffer(myIp, async (packet) => {
         country: packet.country || 'N/A',
         service: serviceName,
         totalBytes,
+        lat,
+        lon,
         formattedTime
     });
 

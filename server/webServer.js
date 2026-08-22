@@ -101,19 +101,48 @@ function startServer(port) {
                 const total = statsRow ? statsRow.totalConnections : 0;
                 const totalPages = Math.ceil(total / limit) || 1;
 
-                res.json({
-                    data: rows,
-                    pagination: {
-                        total: total,
-                        page: page,
-                        limit: limit,
-                        totalPages: totalPages
-                    },
-                    stats: {
-                        totalConnections: total,
-                        totalBytes: statsRow ? statsRow.totalBytes : 0,
-                        totalCountries: statsRow ? statsRow.totalCountries : 0
+                const respond = (rowsWithHops) => {
+                    res.json({
+                        data: rowsWithHops,
+                        pagination: {
+                            total: total,
+                            page: page,
+                            limit: limit,
+                            totalPages: totalPages
+                        },
+                        stats: {
+                            totalConnections: total,
+                            totalBytes: statsRow ? statsRow.totalBytes : 0,
+                            totalCountries: statsRow ? statsRow.totalCountries : 0
+                        }
+                    });
+                };
+
+                if (rows.length === 0) {
+                    return respond(rows);
+                }
+
+                // Query 3: Recupero degli hop di traceroute per gli IP presenti nella pagina corrente.
+                // Necessario per ricostruire l'intero percorso sulla mappa quando il DB viene esportato/importato.
+                const distinctIps = [...new Set(rows.map(r => r.remote_ip))];
+                const placeholders = distinctIps.map(() => '?').join(',');
+                const hopsQuery = `SELECT * FROM hops WHERE target_ip IN (${placeholders}) ORDER BY target_ip, hop_number ASC`;
+
+                db.all(hopsQuery, distinctIps, (hopsErr, hopRows) => {
+                    if (hopsErr) {
+                        console.error('[DATABASE] Errore durante il recupero degli hop:', hopsErr.message);
+                        // Non blocchiamo la risposta principale per un errore sugli hop: sessioni senza percorso completo
+                        return respond(rows.map(r => ({ ...r, hops: [] })));
                     }
+
+                    const hopsByIp = {};
+                    for (const hop of hopRows) {
+                        if (!hopsByIp[hop.target_ip]) hopsByIp[hop.target_ip] = [];
+                        hopsByIp[hop.target_ip].push(hop);
+                    }
+
+                    const rowsWithHops = rows.map(r => ({ ...r, hops: hopsByIp[r.remote_ip] || [] }));
+                    respond(rowsWithHops);
                 });
             });
         });

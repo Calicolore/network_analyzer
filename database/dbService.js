@@ -12,7 +12,7 @@ const db = new Database(dbPath);
 
 db.pragma('journal_mode = WAL');
 
-// CREAZIONE TABELLA SESSIONS
+// CREAZIONE TABELLA SESSIONS (include lat/lon per la ricostruzione della mappa da DB importato)
 const initQuery = `
 CREATE TABLE IF NOT EXISTS sessions (
     session_id TEXT PRIMARY KEY,
@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     country TEXT,
     service TEXT,
     total_bytes INTEGER DEFAULT 0,
+    lat REAL,
+    lon REAL,
     first_seen TEXT,
     last_seen TEXT,
     status TEXT DEFAULT 'active'
@@ -32,6 +34,46 @@ CREATE TABLE IF NOT EXISTS sessions (
 `;
 
 db.exec(initQuery);
+
+// CREAZIONE TABELLA HOPS (nodi intermedi di traceroute, uno-a-molti per IP di destinazione)
+// Chiave logica su target_ip (non su session_id): il traceroute è deduplicato per IP,
+// quindi sessioni diverse verso lo stesso IP condividono lo stesso percorso di hop.
+const initHopsQuery = `
+CREATE TABLE IF NOT EXISTS hops (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    target_ip TEXT NOT NULL,
+    hop_number INTEGER NOT NULL,
+    ip TEXT NOT NULL,
+    lat REAL,
+    lon REAL,
+    country TEXT,
+    city TEXT,
+    provider TEXT,
+    UNIQUE(target_ip, hop_number)
+);
+CREATE INDEX IF NOT EXISTS idx_hops_target_ip ON hops(target_ip);
+`;
+
+db.exec(initHopsQuery);
+
+/**
+ * Aggiunge una colonna a una tabella esistente solo se non è già presente.
+ * Necessario per i DB creati con lo schema precedente (privo di lat/lon),
+ * dato che "CREATE TABLE IF NOT EXISTS" non altera tabelle già esistenti.
+ */
+function safeAddColumn(table, columnDef) {
+    try {
+        db.exec(`ALTER TABLE ${table} ADD COLUMN ${columnDef}`);
+        console.log(`[DATABASE] Migrazione applicata: ${table}.${columnDef}`);
+    } catch (err) {
+        if (!/duplicate column name/i.test(err.message)) {
+            console.error(`[DATABASE] Errore migrazione colonna (${table}.${columnDef}):`, err.message);
+        }
+    }
+}
+
+safeAddColumn('sessions', 'lat REAL');
+safeAddColumn('sessions', 'lon REAL');
 
 // === RIPRISTINO STATO ALL'AVVIO ===
 const resetStmt = db.prepare("UPDATE sessions SET status = 'closed' WHERE status IN ('active', 'idle')");
@@ -51,11 +93,11 @@ const upsertStmt = db.prepare(`
     INSERT INTO sessions (
         session_id, remote_ip, remote_port, host_name, resource_name,
         technical_subtitle, provider, country, service, total_bytes,
-        first_seen, last_seen, status
+        lat, lon, first_seen, last_seen, status
     ) VALUES (
         @sessionId, @remoteIp, @remotePort, @hostName, @resourceName,
         @technicalSubtitle, @provider, @country, @service, @totalBytes,
-        @formattedTime, @formattedTime, 'active'
+        @lat, @lon, @formattedTime, @formattedTime, 'active'
     )
     ON CONFLICT(session_id) DO UPDATE SET
         total_bytes = @totalBytes,
@@ -67,10 +109,27 @@ const upsertStmt = db.prepare(`
         END,
         technical_subtitle = COALESCE(excluded.technical_subtitle, sessions.technical_subtitle),
         provider = COALESCE(excluded.provider, sessions.provider),
+        lat = COALESCE(excluded.lat, sessions.lat),
+        lon = COALESCE(excluded.lon, sessions.lon),
         status = 'active';
 `);
 
 const statusStmt = db.prepare('UPDATE sessions SET status = ? WHERE session_id = ?');
+
+// Prepared statement per l'inserimento/aggiornamento dei nodi di traceroute (scrittura diretta, bassa frequenza)
+const upsertHopStmt = db.prepare(`
+    INSERT INTO hops (target_ip, hop_number, ip, lat, lon, country, city, provider)
+    VALUES (@targetIp, @hopNumber, @ip, @lat, @lon, @country, @city, @provider)
+    ON CONFLICT(target_ip, hop_number) DO UPDATE SET
+        ip = excluded.ip,
+        lat = excluded.lat,
+        lon = excluded.lon,
+        country = excluded.country,
+        city = excluded.city,
+        provider = excluded.provider;
+`);
+
+const getHopsByTargetIpStmt = db.prepare('SELECT hop_number, ip, lat, lon, country, city, provider FROM hops WHERE target_ip = ? ORDER BY hop_number ASC');
 
 // Transazione batch atomica
 const executeBatchTransaction = db.transaction((upserts, statuses) => {
@@ -134,10 +193,36 @@ function closeAllActiveSessions() {
     console.log(`[DATABASE] Tutte le sessioni attive e idle sono state segnate come "closed" (${res.changes} sessioni aggiornate).`);
 }
 
+/**
+ * Salva o aggiorna un singolo hop di traceroute per un IP di destinazione.
+ * Scrittura diretta (non bufferizzata): il volume di hop è molto più basso di quello dei pacchetti.
+ */
+function upsertHop(hopData) {
+    try {
+        upsertHopStmt.run(hopData);
+    } catch (err) {
+        console.error('[DATABASE] Errore durante il salvataggio dell\'hop di traceroute:', err.message);
+    }
+}
+
+/**
+ * Recupera, in ordine, tutti gli hop di traceroute registrati per un IP di destinazione
+ */
+function getHopsByTargetIp(targetIp) {
+    try {
+        return getHopsByTargetIpStmt.all(targetIp);
+    } catch (err) {
+        console.error('[DATABASE] Errore durante il recupero degli hop:', err.message);
+        return [];
+    }
+}
+
 module.exports = {
     db,
     upsertSession,
     updateSessionStatus,
     closeAllActiveSessions,
-    flushBuffer
+    flushBuffer,
+    upsertHop,
+    getHopsByTargetIp
 };

@@ -75,6 +75,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (packetData.hostName) existingGlobal.host_name = packetData.hostName;
             if (packetData.provider) existingGlobal.provider = packetData.provider;
             if (packetData.service) existingGlobal.service = packetData.service;
+            // lat/lon: mantiene il valore già noto se il pacchetto corrente non lo fornisce
+            if (packetData.lat !== undefined && packetData.lat !== null) existingGlobal.lat = packetData.lat;
+            if (packetData.lon !== undefined && packetData.lon !== null) existingGlobal.lon = packetData.lon;
             existingGlobal.status = 'active';
             existingGlobal.is_current_session = true;
         } else {
@@ -89,6 +92,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 country: packetData.country || 'N/A',
                 service: packetData.service || 'N/A',
                 total_bytes: calculatedBytes,
+                lat: packetData.lat ?? null,
+                lon: packetData.lon ?? null,
+                hops: [], // Popolato in seguito dal listener 'traceroute_hop'
                 first_seen: packetData.time,
                 last_seen: packetData.time,
                 status: 'active',
@@ -99,6 +105,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
         ui.updateDropdownsWithNewItem(packetData);
         scheduleRender();
+    });
+
+    // Aggancia gli hop di traceroute scoperti in tempo reale alle sessioni corrispondenti,
+    // così l'export JSON "Sessione Corrente" porta con sé l'intero percorso, non solo la destinazione.
+    socket.on('traceroute_hop', (hopData) => {
+        if (exp && exp.isImportedMode) return;
+        if (!hopData || !hopData.targetIp) return;
+
+        state.globalChartSessions
+            .filter(s => s.remote_ip === hopData.targetIp)
+            .forEach(session => {
+                if (!Array.isArray(session.hops)) session.hops = [];
+                const alreadyPresent = session.hops.some(h => h.hop_number === hopData.hopNumber);
+                if (!alreadyPresent) {
+                    session.hops.push({
+                        hop_number: hopData.hopNumber,
+                        ip: hopData.ip,
+                        lat: hopData.lat,
+                        lon: hopData.lon,
+                        country: hopData.country,
+                        city: hopData.city,
+                        provider: hopData.provider
+                    });
+                }
+            });
     });
 
     // Listener per il cambio dell'ambito dati

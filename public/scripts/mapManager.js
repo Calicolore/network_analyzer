@@ -30,6 +30,10 @@ const southWest = L.latLng(-89.98, -180);
 const northEast = L.latLng(89.98, 180);
 map.setMaxBounds(L.latLngBounds(southWest, northEast));
 
+// Espone l'istanza Leaflet ad altri moduli (es. analytics.js per invalidateSize, mapImportManager.js
+// per disegnare le rotte ricostruite da un DB importato)
+window.map = map;
+
 // --- RESIZE BORDO INFERIORE MAPPA ---
 const mapContainer = document.getElementById('map-container');
 const resizeHandle = document.getElementById('map-resize-handle');

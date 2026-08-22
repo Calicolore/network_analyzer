@@ -36,12 +36,12 @@
 
             <!-- SELETTORE / GESTIONE DB IMPORTATI -->
             <div style="position: relative; display: flex; align-items: center; gap: 5px;">
-                <input type="file" id="input-header-import-file" accept=".json, .csv" style="display: none;">
+                <input type="file" id="input-header-import-file" accept=".json" style="display: none;">
 
                 <select id="select-imported-db"
                     style="background: #334155; color: white; border: 1px solid #475569; padding: 6px 10px; border-radius: 6px; font-size: 0.85em; font-weight: bold; cursor: pointer;">
                     <option value="" disabled selected>📂 DB Importati</option>
-                    <option value="__NEW__">➕ Importa nuovo DB (JSON/CSV)...</option>
+                    <option value="__NEW__">➕ Importa nuovo DB (JSON)...</option>
                 </select>
 
                 <button id="btn-reset-import"
@@ -210,6 +210,13 @@
                 </div>
 
                 <div class="filter-group">
+                    <label for="select-country">Nazione</label>
+                    <select id="select-country">
+                        <option value="">Tutte le Nazioni</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
                     <label for="select-service">Servizio / Porta</label>
                     <select id="select-service">
                         <option value="">Tutti i Servizi</option>
@@ -261,12 +268,9 @@
                             <option value="current">Vista Corrente (Filtrata)</option>
                             <option value="full">Intero Database SQLite</option>
                         </select>
-                        <button id="btn-export-csv"
-                            style="background: #10b981; color: white; border: none; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.85em;">📄
-                            CSV</button>
                         <button id="btn-export-json"
                             style="background: #6366f1; color: white; border: none; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.85em;">📦
-                            JSON</button>
+                            Esporta JSON</button>
                     </div>
                 </div>
             </div>
@@ -354,26 +358,13 @@
         </div>
     </aside>
 
-    <script>
-        // Funzione helper per l'esportazione dinamica
-        function triggerExport(format) {
-            const scopeSelect = document.getElementById('export-scope-select');
-            const scope = scopeSelect ? scopeSelect.value : 'current';
-
-            if (scope === 'full') {
-                window.analyticsExport.exportFullDatabase(format);
-            } else {
-                window.analyticsExport.exportCurrentSession(format);
-            }
-        }
-    </script>
-
     <!-- DIPENDENZE ED ESECUZIONE MODULI -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="/socket.io/socket.io.js"></script>
 
     <script src="scripts/mapManager.js"></script>
+    <script src="scripts/mapImportManager.js"></script>
     <script src="scripts/filterManager.js"></script>
     <script src="scripts/bandwidthChart.js"></script>
     <script src="scripts/uiManager.js"></script>

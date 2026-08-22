@@ -1,5 +1,9 @@
 /**
- * Modulo Export & Import - Esportazione ed Importazione Dati CSV/JSON (analyticsExport.js)
+ * Modulo Export & Import - Esportazione ed Importazione Dati JSON (analyticsExport.js)
+ *
+ * NOTA: Il supporto CSV è stato rimosso. Il formato JSON è l'unico che preserva la
+ * fedeltà completa dei dati (in particolare lat/lon e l'array "hops" del traceroute,
+ * indispensabili per ricostruire il percorso sulla mappa quando si importa un DB).
  */
 
 window.analyticsExport = {
@@ -8,7 +12,7 @@ window.analyticsExport = {
     savedDatasets: {},
 
     /**
-     * Inizializza i listener per l'header e i pulsanti di esportazione (Singola associazione)
+     * Inizializza i listener per l'header e il pulsante di esportazione
      */
     initHeaderControls() {
         const selectDb = document.getElementById('select-imported-db');
@@ -42,26 +46,20 @@ window.analyticsExport = {
             });
         }
 
-        // Listener UNICO per i pulsanti di esportazione
-        const btnCsv = document.getElementById('btn-export-csv');
         const btnJson = document.getElementById('btn-export-json');
-
-        if (btnCsv) {
-            btnCsv.onclick = () => this.triggerExport('csv');
-        }
         if (btnJson) {
-            btnJson.onclick = () => this.triggerExport('json');
+            btnJson.onclick = () => this.triggerExport();
         }
     },
 
-    triggerExport(format = 'csv') {
+    triggerExport() {
         const scopeSelect = document.getElementById('export-scope-select');
         const scope = scopeSelect ? scopeSelect.value : 'current';
 
         if (scope === 'full' && !this.isImportedMode) {
-            this.exportFullDatabase(format);
+            this.exportFullDatabase();
         } else {
-            this.exportCurrentSession(format);
+            this.exportCurrentSession();
         }
     },
 
@@ -71,18 +69,14 @@ window.analyticsExport = {
         const reader = new FileReader();
         const extension = file.name.split('.').pop().toLowerCase();
 
+        if (extension !== 'json') {
+            return alert('Formato non supportato! Seleziona un file .json (il supporto CSV è stato rimosso).');
+        }
+
         reader.onload = (e) => {
             try {
                 const content = e.target.result;
-                let parsedData = [];
-
-                if (extension === 'json') {
-                    parsedData = JSON.parse(content);
-                } else if (extension === 'csv') {
-                    parsedData = this.parseCsv(content);
-                } else {
-                    return alert('Formato non supportato! Seleziona un file .json o .csv');
-                }
+                const parsedData = JSON.parse(content);
 
                 if (!Array.isArray(parsedData) || parsedData.length === 0) {
                     return alert('Il file importato non contiene dati validi o è vuoto.');
@@ -124,7 +118,7 @@ window.analyticsExport = {
 
         const newOpt = document.createElement('option');
         newOpt.value = '__NEW__';
-        newOpt.textContent = '➕ Importa nuovo DB (JSON/CSV)...';
+        newOpt.textContent = '➕ Importa nuovo DB (JSON)...';
         selectDb.appendChild(newOpt);
     },
 
@@ -161,6 +155,12 @@ window.analyticsExport = {
                 window.analyticsUI.applyFiltersAndRender(true);
             }
         }
+
+        // Ricostruisce la mappa Leaflet (vista Live) usando lat/lon + hops del dataset importato,
+        // tramite il modulo dedicato mapImportManager.js (indipendente dalla mappa real-time)
+        if (window.MapImportManager && typeof window.MapImportManager.renderDataset === 'function') {
+            window.MapImportManager.renderDataset(window.analyticsState.globalChartSessions);
+        }
     },
 
     resetToLiveMode() {
@@ -193,48 +193,17 @@ window.analyticsExport = {
             selectViewScope.value = window.analyticsState.viewScope || 'full';
         }
 
+        // Rimuove dalla mappa le rotte del dataset importato, per non mescolarle col traffico live
+        if (window.MapImportManager && typeof window.MapImportManager.clear === 'function') {
+            window.MapImportManager.clear();
+        }
+
         if (window.analyticsApi && typeof window.analyticsApi.loadSessionsData === 'function') {
             window.analyticsApi.loadSessionsData();
         }
     },
 
-    parseCsv(csvText) {
-        const lines = csvText.split(/\r\n|\n/).filter(line => line.trim() !== '');
-        if (lines.length < 2) return [];
-
-        const headerMap = {
-            'ip remoto': 'remote_ip',
-            'host name': 'host_name',
-            'nazione': 'country',
-            'servizio': 'service',
-            'provider': 'provider',
-            'bytes totali': 'total_bytes',
-            'stato': 'status',
-            'ultima attivita': 'last_seen'
-        };
-
-        const rawHeaders = lines[0].split(',').map(h => h.replace(/^"|"$/g, '').trim().toLowerCase());
-        const keys = rawHeaders.map(h => headerMap[h] || h);
-
-        const result = [];
-        for (let i = 1; i < lines.length; i++) {
-            const values = lines[i].match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || [];
-            const rowObj = {};
-
-            keys.forEach((key, index) => {
-                let val = values[index] ? values[index].trim() : '';
-                val = val.replace(/^"|"$/g, '').replace(/""/g, '"');
-                if (key === 'total_bytes') val = parseFloat(val) || 0;
-                rowObj[key] = val;
-            });
-
-            result.push(rowObj);
-        }
-
-        return result;
-    },
-
-    exportCurrentSession(format = 'csv') {
+    exportCurrentSession() {
         const data = window.filteredConnections || window.analyticsState?.globalChartSessions || [];
 
         if (data.length === 0) {
@@ -242,17 +211,11 @@ window.analyticsExport = {
         }
 
         const timestamp = new Date().toISOString().slice(0, 10);
-        const fileName = `network_session_current_${timestamp}.${format}`;
-
-        if (format === 'json') {
-            this.downloadFile(JSON.stringify(data, null, 2), fileName, 'application/json');
-        } else {
-            const csvContent = this.jsonToCSV(data);
-            this.downloadFile(csvContent, fileName, 'text/csv;charset=utf-8;');
-        }
+        const fileName = `network_session_current_${timestamp}.json`;
+        this.downloadFile(JSON.stringify(data, null, 2), fileName, 'application/json');
     },
 
-    async exportFullDatabase(format = 'csv') {
+    async exportFullDatabase() {
         try {
             const response = await fetch('/api/sessions?exportAll=true');
             if (!response.ok) throw new Error('Errore nel recupero dati dal server');
@@ -265,35 +228,12 @@ window.analyticsExport = {
             }
 
             const timestamp = new Date().toISOString().slice(0, 10);
-            const fileName = `network_db_full_${timestamp}.${format}`;
-
-            if (format === 'json') {
-                this.downloadFile(JSON.stringify(data, null, 2), fileName, 'application/json');
-            } else {
-                const csvContent = this.jsonToCSV(data);
-                this.downloadFile(csvContent, fileName, 'text/csv;charset=utf-8;');
-            }
+            const fileName = `network_db_full_${timestamp}.json`;
+            this.downloadFile(JSON.stringify(data, null, 2), fileName, 'application/json');
         } catch (error) {
             console.error('[EXPORT] Errore durante l\'esportazione del DB:', error);
             alert('Si è verificato un errore durante l\'esportazione dell\'intero database.');
         }
-    },
-
-    jsonToCSV(items) {
-        if (!items || !items.length) return '';
-
-        const headers = Object.keys(items[0]);
-        const headerRow = headers.join(',');
-
-        const bodyRows = items.map(item =>
-            headers.map(header => {
-                const val = item[header] ?? '';
-                const escaped = String(val).replace(/"/g, '""');
-                return `"${escaped}"`;
-            }).join(',')
-        );
-
-        return [headerRow, ...bodyRows].join('\n');
     },
 
     downloadFile(content, fileName, contentType) {
