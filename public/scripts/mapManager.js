@@ -34,6 +34,12 @@ map.setMaxBounds(L.latLngBounds(southWest, northEast));
 // per disegnare le rotte ricostruite da un DB importato)
 window.map = map;
 
+// Layer group dedicato a TUTTI gli elementi del traffico live (linee, hitbox, marker).
+// Permette di "mettere in pausa" la mappa live (map.removeLayer(liveLayerGroup)) senza
+// distruggere nulla: i marker/linee restano intatti in memoria con popup, colori e coordinate,
+// pronti per essere riattaccati istantaneamente (map.addLayer(liveLayerGroup)) al ritorno da un DB importato.
+const liveLayerGroup = L.layerGroup().addTo(map);
+
 // --- RESIZE BORDO INFERIORE MAPPA ---
 const mapContainer = document.getElementById('map-container');
 const resizeHandle = document.getElementById('map-resize-handle');
@@ -292,7 +298,7 @@ function drawCurveLine(start, end, color, sessionId) {
         opacity: 0.8,
         smoothFactor: 1,
         interactive: true
-    }).addTo(map);
+    }).addTo(liveLayerGroup);
 
     // 2. Hitbox invisibile per facilitare il click
     const invisibleHitbox = L.polyline(latlngs, {
@@ -302,7 +308,7 @@ function drawCurveLine(start, end, color, sessionId) {
         interactive: true,
         pane: 'hitboxPane',   
         bubblingMouseEvents: false
-    }).addTo(map);
+    }).addTo(liveLayerGroup);
 
     // Collega gli eventi
     [visibleLine, invisibleHitbox].forEach(line => {
@@ -432,7 +438,7 @@ function createCustomMarker(latLng, color, isFinal = false, isSource = false, se
         interactive: true,
         isFinal: isFinal,
         isSource: isSource
-    }).addTo(map);
+    }).addTo(liveLayerGroup);
 
     if (sessionId) {
         marker.on('click', (e) => {
@@ -533,10 +539,10 @@ function updateMapTraceroute(data) {
             if (route.points.some(p => p[0] === hopLatLng[0] && p[1] === hopLatLng[1])) return;
 
             route.lines.forEach(l => {
-                if (l._hitbox) map.removeLayer(l._hitbox);
-                map.removeLayer(l);
+                if (l._hitbox) liveLayerGroup.removeLayer(l._hitbox);
+                liveLayerGroup.removeLayer(l);
             });
-            route.hopMarkers.forEach(m => map.removeLayer(m));
+            route.hopMarkers.forEach(m => liveLayerGroup.removeLayer(m));
             route.lines = [];
             route.hopMarkers = [];
 
@@ -620,11 +626,39 @@ function removeSessionFromMap(sessionId) {
     const route = sessionRoutes.get(sessionId);
     if (route) {
         route.lines.forEach(line => {
-            if (line._hitbox) map.removeLayer(line._hitbox); // Rimuove l'hitbox associata
-            map.removeLayer(line);
+            if (line._hitbox) liveLayerGroup.removeLayer(line._hitbox); // Rimuove l'hitbox associata
+            liveLayerGroup.removeLayer(line);
         });
-        route.hopMarkers.forEach(marker => map.removeLayer(marker));
+        route.hopMarkers.forEach(marker => liveLayerGroup.removeLayer(marker));
         sessionRoutes.delete(sessionId);
     }
     activeMarkers.delete(sessionId);
 }
+
+/**
+ * ====================================================================================
+ * PAUSA / RIPRESA DEL TRAFFICO LIVE (per la modalità "DB Importato")
+ * ====================================================================================
+ * Staccare/riattaccare l'intero layerGroup NON distrugge nulla: sessionRoutes e
+ * activeMarkers restano invariati in memoria. Il ripristino al ritorno da un DB
+ * importato è quindi istantaneo e pixel-identico a come si trovava prima della pausa,
+ * senza bisogno di richiedere nulla al server.
+ * ====================================================================================
+ */
+function pauseLiveTraffic() {
+    if (map.hasLayer(liveLayerGroup)) {
+        map.removeLayer(liveLayerGroup);
+        console.log('[MAPPA] Traffico live nascosto (DB importato attivo).');
+    }
+}
+
+function resumeLiveTraffic() {
+    if (!map.hasLayer(liveLayerGroup)) {
+        map.addLayer(liveLayerGroup);
+        console.log('[MAPPA] Traffico live ripristinato.');
+    }
+}
+
+window.MapManager = window.MapManager || {};
+window.MapManager.pauseLiveTraffic = pauseLiveTraffic;
+window.MapManager.resumeLiveTraffic = resumeLiveTraffic;

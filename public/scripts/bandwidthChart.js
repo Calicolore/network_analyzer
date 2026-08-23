@@ -2,13 +2,24 @@
  * ====================================================================================
  * GESTORE GRAFICO BANDA IN TEMPO REALE (bandwidthChart.js)
  * ====================================================================================
+ *
+ * NOTA SULLA MODALITÀ "DB IMPORTATO":
+ * Quando è attivo un DB importato (window.analyticsExport.isImportedMode === true),
+ * il traffico live è in pausa generale (vedi dashboard.js). Coerentemente:
+ * - Il grafico "Temporale" resta piatto a zero (nessun pacchetto live in arrivo).
+ * - Il grafico "Per Connessione" mostra i totali del DB importato, non l'accumulo live.
+ * - Le statistiche Download/Upload restano a 0.0 KB/s.
+ * L'accumulo live NON viene mai azzerato durante la pausa: viene solo "congelato" in una
+ * mappa separata, così tornando a Real Time il grafico riprende esattamente da dove
+ * si era fermato, senza perdere nulla.
+ * ====================================================================================
  */
 
 let bandwidthChart = null;
 let currentChartMode = 'line'; // 'line' | 'bar'
 const MAX_DATA_POINTS = 30;
 
-// Accumulatori di Byte per il secondo corrente (Grafico Temporale)
+// Accumulatori di Byte per il secondo corrente (Grafico Temporale, solo traffico live)
 let currentDownloadBytes = 0;
 let currentUploadBytes = 0;
 
@@ -17,11 +28,31 @@ let lineLabels = Array(MAX_DATA_POINTS).fill('');
 let lineDownloadData = Array(MAX_DATA_POINTS).fill(0);
 let lineUploadData = Array(MAX_DATA_POINTS).fill(0);
 
-// Mappa per il traffico delle singole connessioni attive
-const connectionTrafficMap = new Map();
+// Mappe per il traffico delle singole connessioni LIVE (grafico "Per Connessione")
+const liveConnectionTrafficMap = new Map();
+const liveConnectionColorMap = new Map();
 
-// Mappa per i colori univoci associati a ciascuna connessione
-const connectionColorMap = new Map();
+// Mappe per il traffico delle singole connessioni del DB IMPORTATO
+const importedConnectionTrafficMap = new Map();
+const importedConnectionColorMap = new Map();
+
+/**
+ * Vero quando è attivo un DB importato (traffico live in pausa generale)
+ */
+function isImportedModeActive() {
+    return !!(window.analyticsExport && window.analyticsExport.isImportedMode);
+}
+
+/**
+ * Restituisce la mappa di traffico attiva in base alla modalità corrente
+ */
+function getActiveTrafficMap() {
+    return isImportedModeActive() ? importedConnectionTrafficMap : liveConnectionTrafficMap;
+}
+
+function getActiveColorMap() {
+    return isImportedModeActive() ? importedConnectionColorMap : liveConnectionColorMap;
+}
 
 /**
  * Genera colori ad alta luminosità per lo sfondo scuro della dashboard.
@@ -36,7 +67,7 @@ function generateRandomColor() {
 }
 
 /**
- * Estrae il nome reale dal pacchetto usando le proprietà trasmesse dal backend
+ * Estrae il nome reale dal pacchetto live usando le proprietà trasmesse dal backend
  */
 function extractConnectionName(packet) {
     if (!packet) return 'Connessione Sconosciuta';
@@ -67,6 +98,23 @@ function extractConnectionName(packet) {
 
     name = String(name).trim();
 
+    name = name.replace(/^https?:\/\//, '');
+    if (name.includes(':') && !name.includes('[')) {
+        name = name.split(':')[0];
+    }
+
+    return name;
+}
+
+/**
+ * Estrae il nome reale da una sessione del DB importato (schema snake_case)
+ */
+function extractConnectionNameFromSession(session) {
+    if (!session) return 'Connessione Sconosciuta';
+
+    let name = session.resource_name || session.host_name || session.provider || session.remote_ip || 'Traffico Sconosciuto';
+
+    name = String(name).trim();
     name = name.replace(/^https?:\/\//, '');
     if (name.includes(':') && !name.includes('[')) {
         name = name.split(':')[0];
@@ -208,6 +256,9 @@ function initSocketListener() {
     window.socket = socket;
 
     socket.on('new_packet', (packet) => {
+        // Pausa generale: mentre un DB è importato, il traffico live non viene elaborato
+        if (isImportedModeActive()) return;
+
         const bytes = packet.size || packet.length || packet.len || packet.bytes || 0;
         const isUpload = packet.direction === '-->' || packet.isOutbound === true;
 
@@ -218,30 +269,40 @@ function initSocketListener() {
             currentDownloadBytes += bytes;
         }
 
-        // 2. Dati grafico a barre
+        // 2. Dati grafico a barre (accumulo LIVE)
         const connName = extractConnectionName(packet);
-        const prevTotal = connectionTrafficMap.get(connName) || 0;
-        connectionTrafficMap.set(connName, prevTotal + bytes);
+        const prevTotal = liveConnectionTrafficMap.get(connName) || 0;
+        liveConnectionTrafficMap.set(connName, prevTotal + bytes);
 
         // Associa il colore della sessione
-        if (!connectionColorMap.has(connName)) {
+        if (!liveConnectionColorMap.has(connName)) {
             const color = packet.sessionColor || generateRandomColor();
-            connectionColorMap.set(connName, color);
+            liveConnectionColorMap.set(connName, color);
         }
     });
 
     setInterval(() => {
+        if (isImportedModeActive()) {
+            // Nessun traffico live in arrivo: grafico temporale piatto a zero,
+            // statistiche Download/Upload a 0.0 KB/s. L'accumulo live resta congelato
+            // (non azzerato) in liveConnectionTrafficMap, pronto per il ripristino.
+            updateBandwidthData(0, 0, true);
+            currentDownloadBytes = 0;
+            currentUploadBytes = 0;
+            return;
+        }
+
         const downloadKB = currentDownloadBytes / 1024;
         const uploadKB = currentUploadBytes / 1024;
 
-        updateBandwidthData(downloadKB, uploadKB);
+        updateBandwidthData(downloadKB, uploadKB, false);
 
         currentDownloadBytes = 0;
         currentUploadBytes = 0;
     }, 1000);
 }
 
-function updateBandwidthData(downloadKB, uploadKB) {
+function updateBandwidthData(downloadKB, uploadKB, isPaused = false) {
     const nowLabel = new Date().toLocaleTimeString();
     lineLabels.push(nowLabel);
     lineDownloadData.push(downloadKB);
@@ -256,7 +317,8 @@ function updateBandwidthData(downloadKB, uploadKB) {
     // Aggiornamento costante per TUTTE le modalità (Line e Bar)
     const statsTextEl = document.getElementById('bandwidth-stats-text');
     if (statsTextEl) {
-        statsTextEl.textContent = `Download: ${downloadKB.toFixed(1)} KB/s | Upload: ${uploadKB.toFixed(1)} KB/s`;
+        const suffix = isPaused ? ' — ⏸ DB importato (traffico live in pausa)' : '';
+        statsTextEl.textContent = `Download: ${downloadKB.toFixed(1)} KB/s | Upload: ${uploadKB.toFixed(1)} KB/s${suffix}`;
     }
 
     if (!bandwidthChart) return;
@@ -303,17 +365,20 @@ function renderBarView() {
     bandwidthChart.config.type = 'bar';
     bandwidthChart.options = getBarChartOptions();
 
-    const sortedConnections = Array.from(connectionTrafficMap.entries())
+    const activeTrafficMap = getActiveTrafficMap();
+    const activeColorMap = getActiveColorMap();
+
+    const sortedConnections = Array.from(activeTrafficMap.entries())
         .sort((a, b) => b[1] - a[1]);
 
     const connectionLabels = sortedConnections.map(([connName]) => connName);
     const connectionDataKB = sortedConnections.map(([, bytes]) => (bytes / 1024).toFixed(1));
-    const connectionColors = sortedConnections.map(([connName]) => connectionColorMap.get(connName) || '#38bdf8');
+    const connectionColors = sortedConnections.map(([connName]) => activeColorMap.get(connName) || '#38bdf8');
 
     bandwidthChart.data.labels = connectionLabels;
     bandwidthChart.data.datasets = [
         {
-            label: 'Banda (KB)',
+            label: isImportedModeActive() ? 'Banda (KB) — DB Importato' : 'Banda (KB)',
             data: connectionDataKB,
             backgroundColor: connectionColors,
             borderColor: connectionColors,
@@ -380,6 +445,48 @@ document.addEventListener('DOMContentLoaded', () => {
     initBandwidthChart();
 });
 
+/**
+ * Carica nel grafico "Per Connessione" i totali del DB importato.
+ * Chiamata da analyticsExport.js all'importazione di un nuovo DB.
+ */
+function loadImportedBandwidthData(sessions) {
+    importedConnectionTrafficMap.clear();
+    importedConnectionColorMap.clear();
+
+    if (Array.isArray(sessions)) {
+        sessions.forEach(session => {
+            const bytes = Number(session.total_bytes) || 0;
+            if (bytes <= 0) return;
+
+            const connName = extractConnectionNameFromSession(session);
+            const prevTotal = importedConnectionTrafficMap.get(connName) || 0;
+            importedConnectionTrafficMap.set(connName, prevTotal + bytes);
+
+            if (!importedConnectionColorMap.has(connName)) {
+                importedConnectionColorMap.set(connName, generateRandomColor());
+            }
+        });
+    }
+
+    // Se il grafico "Per Connessione" è già visibile, aggiorna subito senza aspettare il prossimo tick
+    if (bandwidthChart && currentChartMode === 'bar') {
+        renderBarView();
+    }
+}
+
+/**
+ * Svuota i dati del DB importato dal grafico "Per Connessione".
+ * Chiamata da analyticsExport.js al ritorno in modalità Real Time.
+ */
+function clearImportedBandwidthData() {
+    importedConnectionTrafficMap.clear();
+    importedConnectionColorMap.clear();
+
+    if (bandwidthChart && currentChartMode === 'bar') {
+        renderBarView();
+    }
+}
+
 window.bandwidthChartManager = {
     update: updateBandwidthData,
     setMode: (mode) => {
@@ -388,5 +495,7 @@ window.bandwidthChartManager = {
             if (mode === 'bar') renderBarView();
             else renderLineView();
         }
-    }
+    },
+    loadImportedData: loadImportedBandwidthData,
+    clearImportedData: clearImportedBandwidthData
 };

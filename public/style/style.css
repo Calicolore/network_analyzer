@@ -545,3 +545,16 @@ h1 {
     filter: grayscale(80%);
     transition: all 0.3s ease;
 }
+
+/* --- PAUSA TRAFFICO LIVE (modalità DB Importato) --- */
+/* !important necessario: deve prevalere sempre sul display inline già gestito dai filtri,
+   così allo sblocco le card tornano a riflettere esattamente lo stato dei filtri di prima */
+.session-card.paused-hidden {
+    display: none !important;
+}
+
+/* --- CARD RICOSTRUITE DA UN DB IMPORTATO --- */
+.session-card.imported-card {
+    border-top-color: #facc15 !important;
+    border-top-style: dashed;
+}

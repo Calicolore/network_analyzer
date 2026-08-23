@@ -7,6 +7,17 @@ const socket = io();
 // Mappa in memoria per tracciare i dati aggiornati di ciascuna sessione
 const sessionsMap = new Map();
 
+/**
+ * Vero quando è attivo un DB importato: in questo stato il traffico live viene messo
+ * in PAUSA GENERALE, non solo nascosto. Nessun evento socket viene elaborato (niente
+ * aggiornamento di sessionsMap, niente DOM, niente mappa): lo sniffing lato server
+ * continua a scrivere sul DB, ma il client smette letteralmente di occuparsene finché
+ * non si preme "Torna a Real Time".
+ */
+function isLiveTrafficPaused() {
+    return !!(window.analyticsExport && window.analyticsExport.isImportedMode);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     if (window.filterManager) {
         window.filterManager.init(() => {
@@ -29,6 +40,7 @@ socket.on('home_location', (data) => {
  * Gestione dei pacchetti in batch a 20 FPS
  */
 socket.on('packet_batch', (packets) => {
+    if (isLiveTrafficPaused()) return;
     if (!Array.isArray(packets) || packets.length === 0) return;
 
     // 1. Aggiornamento dati in memoria (sincrono e veloce)
@@ -43,6 +55,8 @@ socket.on('packet_batch', (packets) => {
 
     // 2. Render UI nel primo frame utile del browser per evitare reflow lag
     requestAnimationFrame(() => {
+        if (isLiveTrafficPaused()) return; // Ricontrollo: potremmo essere passati a import nel frattempo
+
         packets.forEach((data) => {
             if (typeof renderPacketCard === 'function') {
                 renderPacketCard(data);
@@ -64,6 +78,7 @@ socket.on('packet_batch', (packets) => {
 
 // Mantenuto per retrocompatibilità con eventi singoli isolati
 socket.on('new_packet', (data) => {
+    if (isLiveTrafficPaused()) return;
     if (!data || !data.sessionId) return;
 
     sessionsMap.set(data.sessionId, data);
@@ -73,6 +88,8 @@ socket.on('new_packet', (data) => {
     }
 
     requestAnimationFrame(() => {
+        if (isLiveTrafficPaused()) return;
+
         if (typeof renderPacketCard === 'function') {
             renderPacketCard(data);
         }
@@ -91,12 +108,14 @@ socket.on('new_packet', (data) => {
 });
 
 socket.on('traceroute_hop', (data) => {
+    if (isLiveTrafficPaused()) return;
     if (typeof updateMapTraceroute === 'function') {
         updateMapTraceroute(data);
     }
 });
 
 socket.on('session_closed', (data) => {
+    if (isLiveTrafficPaused()) return;
     if (typeof markSessionClosed === 'function') {
         // Passiamo sia l'ID che il motivo della chiusura
         markSessionClosed(data.sessionId, data.reason); 
@@ -104,6 +123,8 @@ socket.on('session_closed', (data) => {
 });
 
 function applyFiltersToDashboardUI() {
+    if (isLiveTrafficPaused()) return;
+
     sessionsMap.forEach((packetData, sessionId) => {
         const card = document.getElementById(sessionId);
         if (card) {

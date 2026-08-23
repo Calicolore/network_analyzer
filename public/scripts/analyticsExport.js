@@ -156,10 +156,28 @@ window.analyticsExport = {
             }
         }
 
-        // Ricostruisce la mappa Leaflet (vista Live) usando lat/lon + hops del dataset importato,
-        // tramite il modulo dedicato mapImportManager.js (indipendente dalla mappa real-time)
+        // --- PAUSA GENERALE DEL TRAFFICO LIVE (mappa + card) ---
+        // Il traffico live non viene distrutto, solo nascosto: lo sniffing lato server continua
+        // a scrivere sul DB, ma il client smette di elaborarlo (vedi guardia in dashboard.js).
+        if (window.MapManager && typeof window.MapManager.pauseLiveTraffic === 'function') {
+            window.MapManager.pauseLiveTraffic();
+        }
+        if (window.UIManager && typeof window.UIManager.pauseLiveCards === 'function') {
+            window.UIManager.pauseLiveCards();
+        }
+
+        // Ricostruisce sulla mappa (linee tratteggiate) e nelle card la vista SOLO del DB importato
         if (window.MapImportManager && typeof window.MapImportManager.renderDataset === 'function') {
             window.MapImportManager.renderDataset(window.analyticsState.globalChartSessions);
+        }
+        if (window.UIManager && typeof window.UIManager.renderImportedCards === 'function') {
+            window.UIManager.renderImportedCards(window.analyticsState.globalChartSessions);
+        }
+
+        // Carica i totali del DB importato nel grafico "Per Connessione"; il grafico "Temporale"
+        // e le statistiche Download/Upload restano a zero (bandwidthChart.js si mette in pausa da sé)
+        if (window.bandwidthChartManager && typeof window.bandwidthChartManager.loadImportedData === 'function') {
+            window.bandwidthChartManager.loadImportedData(window.analyticsState.globalChartSessions);
         }
     },
 
@@ -196,6 +214,28 @@ window.analyticsExport = {
         // Rimuove dalla mappa le rotte del dataset importato, per non mescolarle col traffico live
         if (window.MapImportManager && typeof window.MapImportManager.clear === 'function') {
             window.MapImportManager.clear();
+        }
+
+        // Rimuove le card ricostruite dal DB importato
+        if (window.UIManager && typeof window.UIManager.clearImportedCards === 'function') {
+            window.UIManager.clearImportedCards();
+        }
+
+        // Rimuove i dati del DB importato dal grafico "Per Connessione": il traffico live
+        // (mai azzerato durante la pausa) torna visibile dal punto in cui si era fermato
+        if (window.bandwidthChartManager && typeof window.bandwidthChartManager.clearImportedData === 'function') {
+            window.bandwidthChartManager.clearImportedData();
+        }
+
+        // --- RIPRESA DEL TRAFFICO LIVE DAL PUNTO IN CUI ERA STATO MESSO IN PAUSA ---
+        // Mappa e card live non erano mai state distrutte, solo nascoste: riappaiono qui
+        // istantaneamente e identiche a come si trovavano al momento dell'importazione.
+        // Da questo momento dashboard.js torna anche a elaborare i nuovi eventi socket in arrivo.
+        if (window.MapManager && typeof window.MapManager.resumeLiveTraffic === 'function') {
+            window.MapManager.resumeLiveTraffic();
+        }
+        if (window.UIManager && typeof window.UIManager.resumeLiveCards === 'function') {
+            window.UIManager.resumeLiveCards();
         }
 
         if (window.analyticsApi && typeof window.analyticsApi.loadSessionsData === 'function') {
