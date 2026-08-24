@@ -248,8 +248,7 @@ window.focusLastHop = function(sessionId) {
     const route = sessionRoutes.get(sessionId);
     if (route && route.hopMarkers.length > 0) {
         const lastMarker = route.hopMarkers[route.hopMarkers.length - 1];
-        map.setView(lastMarker.getLatLng(), 6, { animate: true, duration: 0.8 });
-        lastMarker.openPopup();
+        centerAndOpenPopup(lastMarker, 6);
     }
 };
 
@@ -283,11 +282,11 @@ function drawCurveLine(start, end, color, sessionId) {
             window.highlightSession(sessionId);
         }
 
-        // Apre il popup dell'ultimo hop di questa rotta
+        // Apre il popup dell'ultimo hop di questa rotta, centrando la mappa sul punto+popup
         const route = sessionRoutes.get(sessionId);
         if (route && route.hopMarkers.length > 0) {
             const lastMarker = route.hopMarkers[route.hopMarkers.length - 1];
-            lastMarker.openPopup();
+            centerAndOpenPopup(lastMarker);
         }
     };
 
@@ -419,11 +418,57 @@ function getHopPopupHTML(sessionId, currentIndex, totalHops, currentIp, currentC
 window.navigateHop = function(sessionId, targetIndex) {
     const route = sessionRoutes.get(sessionId);
     if (!route || !route.hopMarkers[targetIndex]) return;
-    
+
     const targetMarker = route.hopMarkers[targetIndex];
-    map.panTo(targetMarker.getLatLng(), { animate: true });
-    targetMarker.openPopup();
+    centerAndOpenPopup(targetMarker);
 };
+
+/**
+ * ====================================================================================
+ * CENTRATURA MAPPA + APERTURA POPUP
+ * ====================================================================================
+ * Un semplice map.setView() centra il PUNTO geografico esattamente al centro del
+ * riquadro mappa — ma il popup si apre SOPRA il marker, quindi il punto finisce
+ * comunque vicino al bordo inferiore (o Leaflet lo sposta lì di sua iniziativa tramite
+ * l'autoPan integrato del popup, che qui teniamo disattivato per evitare conflitti).
+ *
+ * Questa funzione centra prima il punto, poi — una volta che il popup è realmente
+ * renderizzato nel DOM (quindi ne conosciamo l'altezza vera) — sposta la vista verso
+ * il basso di metà dell'altezza del popup, così l'INSIEME punto+popup risulta
+ * visivamente centrato nel riquadro, invece di stare sui bordi o di lato.
+ * ====================================================================================
+ */
+function centerAndOpenPopup(marker, zoomLevel) {
+    if (!marker) return;
+
+    const targetZoom = (zoomLevel !== undefined && zoomLevel !== null) ? zoomLevel : map.getZoom();
+    const targetLatLng = marker.getLatLng();
+
+    function openAndRebalance() {
+        marker.openPopup();
+
+        // Aspettiamo un istante che il popup sia nel DOM per leggerne l'altezza reale
+        setTimeout(() => {
+            const popupEl = marker.getPopup() && marker.getPopup().getElement();
+            const popupHeight = popupEl ? popupEl.offsetHeight : 140;
+
+            if (popupHeight > 20) {
+                // panBy con Y negativo sposta il CONTENUTO verso l'alto, cioè il punto
+                // scende nel riquadro, lasciando sopra lo spazio occupato dal popup.
+                map.panBy([0, -(popupHeight / 2)], { animate: true });
+            }
+        }, 50);
+    }
+
+    map.once('moveend', openAndRebalance);
+    map.setView(targetLatLng, targetZoom, { animate: true, duration: 0.8 });
+
+    // Fallback: se la mappa era già centrata lì, 'moveend' potrebbe non scattare
+    setTimeout(() => {
+        map.off('moveend', openAndRebalance);
+        if (!marker.isPopupOpen()) openAndRebalance();
+    }, 900);
+}
 
 /**
  * Crea marker punto sulla mappa
@@ -449,8 +494,8 @@ function createCustomMarker(latLng, color, isFinal = false, isSource = false, se
                 window.highlightSession(sessionId);
             }
             
-            // Apre il popup del marker specifico su cui si è cliccato
-            marker.openPopup();
+            // Centra la mappa sul marker e apre il popup
+            centerAndOpenPopup(marker);
         });
     }
 
@@ -481,14 +526,14 @@ function updateMapPacket(data) {
         const isAnotherHighlighted = currentlyHighlightedSessionId && (currentlyHighlightedSessionId !== data.sessionId);
 
         const startMarker = createCustomMarker(homeCoords, data.sessionColor, false, true, data.sessionId);
-        startMarker.bindPopup(getHopPopupHTML(data.sessionId, 0, 2, 'Localhost', 'Sorgente', data.remotePort, ''));
+        startMarker.bindPopup(getHopPopupHTML(data.sessionId, 0, 2, 'Localhost', 'Sorgente', data.remotePort, ''), { autoPan: false });
         route.hopMarkers.push(startMarker);
 
         const line = drawCurveLine(homeCoords, [data.lat, data.lon], data.sessionColor, data.sessionId);
         route.lines.push(line);
 
         const finalMarker = createCustomMarker([data.lat, data.lon], data.sessionColor, true, false, data.sessionId);
-        finalMarker.bindPopup(getHopPopupHTML(data.sessionId, 1, 2, data.remoteIp, data.resourceName, data.remotePort, data.technicalSubtitle, data.provider));
+        finalMarker.bindPopup(getHopPopupHTML(data.sessionId, 1, 2, data.remoteIp, data.resourceName, data.remotePort, data.technicalSubtitle, data.provider), { autoPan: false });
 
         route.hopMarkers.push(finalMarker);
         activeMarkers.set(data.sessionId, finalMarker);
@@ -568,7 +613,7 @@ function updateMapTraceroute(data) {
                 const currentSubtitle = isLast ? route.subtitle : `Nodo di transito per ${route.cities[i]}`;
                 const currentProvider = route.providers ? route.providers[i] : null;
                 
-                marker.bindPopup(getHopPopupHTML(sessionId, i, route.points.length, route.ips[i], route.cities[i], extractedPort, currentSubtitle, currentProvider));
+                marker.bindPopup(getHopPopupHTML(sessionId, i, route.points.length, route.ips[i], route.cities[i], extractedPort, currentSubtitle, currentProvider), { autoPan: false });
                 
                 if (isAnotherHighlighted) {
                     marker.setStyle({
