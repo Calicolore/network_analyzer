@@ -13,8 +13,8 @@
  * Nota: le SCRITTURE su SQLite (sessioni/hop/cache provider) avvengono altrove, in
  * database/dbService.js, tramite una connessione separata (`better-sqlite3`,
  * sincrona). Questo modulo apre una propria connessione di sola LETTURA (`sqlite3`,
- * asincrona) allo stesso file: le due convivono grazie alla modalità WAL abilitata
- * da dbService.js.
+ * asincrona) allo stesso file: le due convivono grazie alla modalità WAL (Write-Ahead Logging)
+ * abilitata da dbService.js.
  * ====================================================================================
  */
 
