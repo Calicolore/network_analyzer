@@ -17,11 +17,12 @@ const geoip = require('geoip-lite');
 
 const { initSniffer } = require('./network/sniffer');
 const { startServer } = require('./server/webServer');
-const { generateRandomColor, getNetworkDeviceIP, translateFlags } = require('./utils/networkUtils');
+const { generateRandomColor, getNetworkDeviceIP, translateFlags, isPrivateIp } = require('./utils/networkUtils');
 const { resolveResourceDetails, recordDnsQuery } = require('./services/dnsService');
 const { getServiceName } = require('./services/portService');
 const { runNativeTraceroute } = require('./services/traceroute');
-const { upsertSession, updateSessionStatus, closeAllActiveSessions } = require('./database/dbService');
+const { enqueueProviderLookup, getCachedProvider } = require('./services/providerService');
+const { upsertSession, updateSessionStatus, closeAllActiveSessions, updateSessionProvider } = require('./database/dbService');
 
 // ================================================================================
 // PASSO 2: CONFIGURAZIONE INIZIALE ED AVVIO SERVER WEB / SOCKET.IO
@@ -101,10 +102,21 @@ initSniffer(myIp, async (packet) => {
     // ================================================================================
     if (!sessionColors.has(sessionId)) {
         sessionColors.set(sessionId, generateRandomColor());
-        
-        // Esegue il traceroute solo per indirizzi pubblici (escludendo reti locali e loopback)
-        if (!remoteIp.startsWith('192.168.') && !remoteIp.startsWith('127.')) {
+
+        // Esegue il traceroute e la risoluzione provider solo per indirizzi pubblici
+        if (!isPrivateIp(remoteIp)) {
             runNativeTraceroute(remoteIp, io);
+
+            // Arricchimento provider asincrono, non bloccante (fire-and-forget)
+            enqueueProviderLookup(remoteIp, (ip, result) => {
+                updateSessionProvider(ip, result.providerLabel);
+                io.emit('provider_resolved', {
+                    remoteIp: ip,
+                    provider: result.providerLabel,
+                    isp: result.isp,
+                    asn: result.asn
+                });
+            });
         }
     }
     const sessionColor = sessionColors.get(sessionId);
@@ -119,8 +131,12 @@ initSniffer(myIp, async (packet) => {
     // ================================================================================
     // FASE 6: RISOLUZIONE DETTAGLI RISORSA (DNS, SNI TLS, PROVIDER)
     // ================================================================================
-    const { hostName, resourceName, technicalSubtitle, provider } = await resolveResourceDetails(remoteIp, packet.payload);
-    
+    const { hostName, resourceName, technicalSubtitle, provider: detectedProvider, flow } = await resolveResourceDetails(remoteIp, packet.payload);
+
+    // Se ip-api.com ha già risolto questo IP, il suo risultato ha priorità sull'euristica hardcoded
+    const cachedProviderInfo = getCachedProvider(remoteIp);
+    const provider = cachedProviderInfo ? cachedProviderInfo.providerLabel : detectedProvider;
+
     sessionLastSeen.set(sessionId, Date.now());
     sessionResourceNames.set(sessionId, resourceName);
     
@@ -154,14 +170,15 @@ initSniffer(myIp, async (packet) => {
         resourceName,
         technicalSubtitle,
         provider,
+        flow,
         totalKB,
-        size: packetSizeBytes, 
-        isOutbound, 
+        size: packetSizeBytes,
+        isOutbound,
         remotePort,
         sessionColor,
         service: serviceName,
         country: packet.country,
-        lat, 
+        lat,
         lon,
         direction: isOutbound ? "-->" : "<--",
         flags: readableFlags,
@@ -187,6 +204,7 @@ initSniffer(myIp, async (packet) => {
         totalBytes,
         lat,
         lon,
+        flow: flow || null,
         formattedTime
     });
 

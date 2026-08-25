@@ -74,6 +74,22 @@ function safeAddColumn(table, columnDef) {
 
 safeAddColumn('sessions', 'lat REAL');
 safeAddColumn('sessions', 'lon REAL');
+safeAddColumn('sessions', 'flow TEXT');
+
+// CREAZIONE TABELLA CACHE PROVIDER/ASN (persiste i risultati di ip-api.com tra i riavvii,
+// per evitare di richiamare l'API per IP già arricchiti in precedenza)
+const initProviderCacheQuery = `
+CREATE TABLE IF NOT EXISTS ip_provider_cache (
+    ip TEXT PRIMARY KEY,
+    isp TEXT,
+    org TEXT,
+    asn TEXT,
+    provider_label TEXT,
+    fetched_at TEXT
+);
+`;
+
+db.exec(initProviderCacheQuery);
 
 // === RIPRISTINO STATO ALL'AVVIO ===
 const resetStmt = db.prepare("UPDATE sessions SET status = 'closed' WHERE status IN ('active', 'idle')");
@@ -93,24 +109,25 @@ const upsertStmt = db.prepare(`
     INSERT INTO sessions (
         session_id, remote_ip, remote_port, host_name, resource_name,
         technical_subtitle, provider, country, service, total_bytes,
-        lat, lon, first_seen, last_seen, status
+        lat, lon, flow, first_seen, last_seen, status
     ) VALUES (
         @sessionId, @remoteIp, @remotePort, @hostName, @resourceName,
         @technicalSubtitle, @provider, @country, @service, @totalBytes,
-        @lat, @lon, @formattedTime, @formattedTime, 'active'
+        @lat, @lon, @flow, @formattedTime, @formattedTime, 'active'
     )
     ON CONFLICT(session_id) DO UPDATE SET
         total_bytes = @totalBytes,
         last_seen = @formattedTime,
-        resource_name = CASE 
-            WHEN excluded.resource_name != 'Risorsa Web' AND excluded.resource_name != '' 
-            THEN excluded.resource_name 
-            ELSE sessions.resource_name 
+        resource_name = CASE
+            WHEN excluded.resource_name != 'Risorsa Web' AND excluded.resource_name != ''
+            THEN excluded.resource_name
+            ELSE sessions.resource_name
         END,
         technical_subtitle = COALESCE(excluded.technical_subtitle, sessions.technical_subtitle),
         provider = COALESCE(excluded.provider, sessions.provider),
         lat = COALESCE(excluded.lat, sessions.lat),
         lon = COALESCE(excluded.lon, sessions.lon),
+        flow = COALESCE(excluded.flow, sessions.flow),
         status = 'active';
 `);
 
@@ -130,6 +147,22 @@ const upsertHopStmt = db.prepare(`
 `);
 
 const getHopsByTargetIpStmt = db.prepare('SELECT hop_number, ip, lat, lon, country, city, provider FROM hops WHERE target_ip = ? ORDER BY hop_number ASC');
+
+// Prepared statement per la cache persistita dei provider/ASN risolti via ip-api.com
+const upsertProviderCacheStmt = db.prepare(`
+    INSERT INTO ip_provider_cache (ip, isp, org, asn, provider_label, fetched_at)
+    VALUES (@ip, @isp, @org, @asn, @providerLabel, @fetchedAt)
+    ON CONFLICT(ip) DO UPDATE SET
+        isp = excluded.isp,
+        org = excluded.org,
+        asn = excluded.asn,
+        provider_label = excluded.provider_label,
+        fetched_at = excluded.fetched_at;
+`);
+
+const updateSessionProviderStmt = db.prepare(`
+    UPDATE sessions SET provider = ? WHERE remote_ip = ? AND status IN ('active', 'idle')
+`);
 
 // Transazione batch atomica
 const executeBatchTransaction = db.transaction((upserts, statuses) => {
@@ -217,6 +250,43 @@ function getHopsByTargetIp(targetIp) {
     }
 }
 
+/**
+ * Salva/aggiorna in modo permanente il risultato di un lookup provider/ASN (ip-api.com).
+ * Scrittura diretta (non bufferizzata): un IP viene risolto una sola volta e mai più.
+ */
+function upsertProviderCache(data) {
+    try {
+        upsertProviderCacheStmt.run(data);
+    } catch (err) {
+        console.error('[DATABASE] Errore durante il salvataggio della cache provider:', err.message);
+    }
+}
+
+/**
+ * Carica in memoria l'intera cache provider persistita, da usare all'avvio per
+ * evitare di richiamare l'API esterna per IP già risolti in run precedenti.
+ */
+function getAllProviderCache() {
+    try {
+        return db.prepare('SELECT * FROM ip_provider_cache').all();
+    } catch (err) {
+        console.error('[DATABASE] Errore durante il caricamento della cache provider:', err.message);
+        return [];
+    }
+}
+
+/**
+ * Aggiorna il campo provider delle sessioni attive/idle già create per un IP,
+ * usato quando il risultato di ip-api.com arriva dopo la creazione della card.
+ */
+function updateSessionProvider(remoteIp, providerLabel) {
+    try {
+        updateSessionProviderStmt.run(providerLabel, remoteIp);
+    } catch (err) {
+        console.error('[DATABASE] Errore durante l\'aggiornamento del provider di sessione:', err.message);
+    }
+}
+
 module.exports = {
     db,
     upsertSession,
@@ -224,5 +294,8 @@ module.exports = {
     closeAllActiveSessions,
     flushBuffer,
     upsertHop,
-    getHopsByTargetIp
+    getHopsByTargetIp,
+    upsertProviderCache,
+    getAllProviderCache,
+    updateSessionProvider
 };

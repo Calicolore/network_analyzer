@@ -129,6 +129,7 @@ function flushPacketBuffer() {
         sessionDiv.dataset.country = (lastPacket.country || '').toLowerCase();
         sessionDiv.dataset.provider = (lastPacket.provider || '').toLowerCase();
         sessionDiv.dataset.service = (lastPacket.service || '').toUpperCase();
+        sessionDiv.dataset.flow = (lastPacket.flow || '').toLowerCase();
 
         const isClosedOrIdle = sessionDiv.classList.contains('closed-card') || sessionDiv.classList.contains('idle-card');
         sessionDiv.dataset.closed = isClosedOrIdle ? 'true' : 'false';
@@ -159,18 +160,22 @@ function createCardNode(data) {
     }
 
     const countryBadge = `<span style="background:#334155; padding:2px 6px; border-radius:4px; font-size:0.7em; margin-left:8px;">${data.country || 'N/A'}</span>`;
+    const providerBadgeStyle = 'background:#0f766e; color:#ecfdf5; padding:2px 6px; border-radius:4px; font-size:0.7em; margin-left:6px;';
+    const flowBadgeStyle = 'background:#4338ca; color:#e0e7ff; padding:2px 6px; border-radius:4px; font-size:0.7em; margin-left:6px;';
+    const providerBadge = `<span class="provider-badge" style="${providerBadgeStyle}${data.provider ? '' : ' display:none;'}">${data.provider || ''}</span>`;
+    const flowBadge = `<span class="flow-badge" style="${flowBadgeStyle}${data.flow ? '' : ' display:none;'}">${data.flow || ''}</span>`;
 
     sessionDiv.innerHTML = `
         <div class="session-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
             <div style="display: flex; flex-direction: column; gap: 4px;">
-                <div class="res-title" 
+                <div class="res-title"
                     style="color: #38bdf8; font-size: 1.1em; font-weight: bold; word-break: break-all;"
                     title="Clicca sulla card per evidenziare la rotta sulla mappa">
                     ${data.resourceName || data.remoteIp}
                 </div>
                 <div class="subtitle-container"></div>
                 <div style="color: #64748b; font-size: 0.75em; font-family: monospace;">
-                    IP: ${data.remoteIp} ${countryBadge}
+                    IP: ${data.remoteIp} ${countryBadge}${providerBadge}${flowBadge}
                 </div>
             </div>
             <div class="bandwidth-meter" style="text-align: right; color: #10b981; font-weight: bold; font-family: monospace; font-size: 0.9em; min-width: 110px;">
@@ -185,8 +190,23 @@ function createCardNode(data) {
     sessionDiv._subContainer = sessionDiv.querySelector('.subtitle-container');
     sessionDiv._meterEl = sessionDiv.querySelector('.bandwidth-meter');
     sessionDiv._containerEl = sessionDiv.querySelector('.packets-container');
+    sessionDiv._providerBadgeEl = sessionDiv.querySelector('.provider-badge');
+    sessionDiv._flowBadgeEl = sessionDiv.querySelector('.flow-badge');
 
     return sessionDiv;
+}
+
+/**
+ * Aggiorna testo e visibilità di un badge (provider/flow) sulla card.
+ */
+function updateBadge(badgeEl, value) {
+    if (!badgeEl) return;
+    if (value) {
+        badgeEl.textContent = value;
+        badgeEl.style.display = '';
+    } else {
+        badgeEl.style.display = 'none';
+    }
 }
 
 function updateCardHeader(sessionDiv, data) {
@@ -233,6 +253,23 @@ function updateCardHeader(sessionDiv, data) {
     if (sessionDiv._meterEl) {
         sessionDiv._meterEl.innerText = `${data.totalKB || 0} KB Tot.`;
     }
+
+    updateBadge(sessionDiv._providerBadgeEl, data.provider);
+    updateBadge(sessionDiv._flowBadgeEl, data.flow);
+}
+
+/**
+ * Applica un aggiornamento provider arrivato in differita (evento 'provider_resolved')
+ * a tutte le card già create per lo stesso IP remoto (più sessioni/porte possono condividerlo).
+ */
+function applyProviderUpdate(payload) {
+    if (!payload || !payload.remoteIp) return;
+    const targetIp = payload.remoteIp.toLowerCase();
+
+    document.querySelectorAll(`.session-card[data-ip="${targetIp}"]`).forEach(sessionDiv => {
+        sessionDiv.dataset.provider = (payload.provider || '').toLowerCase();
+        updateBadge(sessionDiv._providerBadgeEl, payload.provider);
+    });
 }
 
 // ================================================================================
@@ -406,6 +443,7 @@ window.UIManager.pauseLiveCards = pauseLiveCards;
 window.UIManager.resumeLiveCards = resumeLiveCards;
 window.UIManager.renderImportedCards = renderImportedCards;
 window.UIManager.clearImportedCards = clearImportedCards;
+window.UIManager.applyProviderUpdate = applyProviderUpdate;
 
 // Event Listeners DOM
 document.addEventListener('DOMContentLoaded', () => {

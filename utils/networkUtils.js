@@ -97,8 +97,28 @@ function translateFlags(flags) {
     return descriptions.join("+") || "ACK";
 }
 
+/**
+ * Verifica se un indirizzo IPv4 appartiene a un intervallo privato, locale o di loopback
+ * (RFC1918, link-local, loopback), usato per escludere questi IP da traceroute e lookup
+ * verso servizi esterni (es. ip-api.com) dato che non avrebbero comunque dati utili.
+ *
+ * @param {string} ip - Indirizzo IPv4 da verificare
+ * @returns {boolean} true se l'IP è privato/locale/loopback
+ */
+function isPrivateIp(ip) {
+    if (!ip) return true;
+    return (
+        ip.startsWith('192.168.') ||
+        ip.startsWith('127.') ||
+        ip.startsWith('10.') ||
+        ip.startsWith('169.254.') ||
+        /^172\.(1[6-9]|2\d|3[0-1])\./.test(ip)
+    );
+}
+
 module.exports = {
     generateRandomColor,
     getNetworkDeviceIP,
-    translateFlags
+    translateFlags,
+    isPrivateIp
 };

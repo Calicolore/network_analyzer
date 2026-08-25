@@ -7,12 +7,14 @@
 // Set per accumulare i valori DISTINCT rilevati dal traffico di rete
 const detectedCountries = new Set();
 const detectedServices = new Set();
+const detectedFlows = new Set();
 
 // Stato locale dei filtri attivi
 const activeFilters = {
     domain: '',
     country: '',
-    service: ''
+    service: '',
+    flow: ''
 };
 
 // Riferimento alla funzione di callback per aggiornare l'interfaccia principale
@@ -59,6 +61,14 @@ function extractPacketService(packet) {
 }
 
 /**
+ * Estrae la famiglia/flow (raggruppamento per sito/servizio, es. domini satellite di x.com)
+ */
+function extractPacketFlow(packet) {
+    if (!packet) return '';
+    return (packet.flow || '').toString().trim();
+}
+
+/**
  * Inizializza i listener degli eventi sugli elementi del DOM
  */
 function initFilterManager(renderCallback) {
@@ -67,6 +77,7 @@ function initFilterManager(renderCallback) {
     const domainInput = document.getElementById('domainSearchInput');
     const countrySelect = document.getElementById('countrySelect');
     const serviceSelect = document.getElementById('serviceSelect');
+    const flowSelect = document.getElementById('flowSelect');
     const resetBtn = document.getElementById('resetFiltersBtn');
 
     // Ricerca dominio in tempo reale durante la digitazione
@@ -84,6 +95,12 @@ function initFilterManager(renderCallback) {
     // Selezione Servizio / Porta
     serviceSelect?.addEventListener('change', (e) => {
         activeFilters.service = e.target.value;
+        triggerFilterUpdate();
+    });
+
+    // Selezione Famiglia/Flow
+    flowSelect?.addEventListener('change', (e) => {
+        activeFilters.flow = e.target.value;
         triggerFilterUpdate();
     });
 
@@ -116,6 +133,13 @@ function updateAvailableFilters(packet) {
         hasNewValue = true;
     }
 
+    // 3. Estrazione Famiglia/Flow
+    const flow = extractPacketFlow(packet);
+    if (flow && !detectedFlows.has(flow)) {
+        detectedFlows.add(flow);
+        hasNewValue = true;
+    }
+
     // Se è stato rilevato un valore nuovo, aggiorna i menu a tendina nel DOM
     if (hasNewValue) {
         renderFilterDropdowns();
@@ -128,11 +152,13 @@ function updateAvailableFilters(packet) {
 function renderFilterDropdowns() {
     const countrySelect = document.getElementById('countrySelect');
     const serviceSelect = document.getElementById('serviceSelect');
+    const flowSelect = document.getElementById('flowSelect');
 
     if (!countrySelect || !serviceSelect) return;
 
     const currentCountry = countrySelect.value;
     const currentService = serviceSelect.value;
+    const currentFlow = flowSelect ? flowSelect.value : '';
 
     // Aggiorna Select Nazioni
     countrySelect.innerHTML = '<option value="">Tutte le Nazioni</option>';
@@ -153,6 +179,18 @@ function renderFilterDropdowns() {
         serviceSelect.appendChild(option);
     });
     serviceSelect.value = currentService;
+
+    // Aggiorna Select Famiglia/Flow
+    if (flowSelect) {
+        flowSelect.innerHTML = '<option value="">Tutti i Flussi</option>';
+        Array.from(detectedFlows).sort().forEach(flow => {
+            const option = document.createElement('option');
+            option.value = flow;
+            option.textContent = flow;
+            flowSelect.appendChild(option);
+        });
+        flowSelect.value = currentFlow;
+    }
 }
 
 /**
@@ -185,6 +223,14 @@ function isPacketMatchingFilters(packet) {
         }
     }
 
+    // 4. Filtro Famiglia / Flow
+    if (activeFilters.flow) {
+        const flow = extractPacketFlow(packet);
+        if (flow !== activeFilters.flow) {
+            return false;
+        }
+    }
+
     return true;
 }
 
@@ -204,14 +250,17 @@ function resetAllFilters() {
     activeFilters.domain = '';
     activeFilters.country = '';
     activeFilters.service = '';
+    activeFilters.flow = '';
 
     const domainInput = document.getElementById('domainSearchInput');
     const countrySelect = document.getElementById('countrySelect');
     const serviceSelect = document.getElementById('serviceSelect');
+    const flowSelect = document.getElementById('flowSelect');
 
     if (domainInput) domainInput.value = '';
     if (countrySelect) countrySelect.value = '';
     if (serviceSelect) serviceSelect.value = '';
+    if (flowSelect) flowSelect.value = '';
 
     triggerFilterUpdate();
 }

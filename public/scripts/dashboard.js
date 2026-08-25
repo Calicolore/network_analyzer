@@ -114,6 +114,13 @@ socket.on('traceroute_hop', (data) => {
     }
 });
 
+socket.on('provider_resolved', (data) => {
+    if (isLiveTrafficPaused()) return;
+    if (window.UIManager && typeof window.UIManager.applyProviderUpdate === 'function') {
+        window.UIManager.applyProviderUpdate(data);
+    }
+});
+
 socket.on('session_closed', (data) => {
     if (isLiveTrafficPaused()) return;
     if (typeof markSessionClosed === 'function') {

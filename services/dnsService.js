@@ -8,6 +8,7 @@ const dns = require('dns').promises;
 const { exec } = require('child_process');
 const util = require('util');
 const execPromise = util.promisify(exec);
+const { findFamilyEntry } = require('./domainFamilies');
 
 // Cache e tabelle di stato
 const hostCache = new Map();         // Cache Reverse DNS
@@ -15,27 +16,29 @@ const ipToDomainMap = new Map();     // Mappa IP -> Dominio da DNS/SNI
 const systemDnsCache = new Map();    // Mappa IP -> Dominio estratto da Windows DNS Cache
 const resolvedResourceCache = new Map(); // Cache finale dei dettagli per IP
 
-// Normalizzazione CDN e Servizi Noti
-const CDN_MAPPING = [
-    { pattern: 'twimg.com', target: 'x.com' },
-    { pattern: 't.co', target: 'x.com' },
-    { pattern: 'twitter.com', target: 'x.com' },
-    { pattern: 'ytimg.com', target: 'youtube.com' },
-    { pattern: 'googlevideo.com', target: 'youtube.com' },
-    { pattern: 'ggpht.com', target: 'youtube.com' },
-    { pattern: 'youtube.com', target: 'youtube.com' }
-];
-
+/**
+ * Normalizza un dominio al brand/sito principale a cui appartiene, se noto
+ * (es. twimg.com -> x.com), tramite la tabella curata in domainFamilies.js.
+ * Se il dominio è una CDN pura senza brand associato (target: null), o non
+ * compare in tabella, viene restituito invariato.
+ */
 function normalizeDomain(domain) {
     if (!domain) return null;
     const d = domain.toLowerCase().trim();
 
-    for (const map of CDN_MAPPING) {
-        if (d.includes(map.pattern)) {
-            return map.target;
-        }
-    }
+    const entry = findFamilyEntry(d);
+    if (entry && entry.target) return entry.target;
     return d;
+}
+
+/**
+ * Restituisce l'identificativo di "famiglia" (flow) a cui appartiene un dominio,
+ * usato per raggruppare in UI le connessioni correlate allo stesso sito/servizio.
+ */
+function getDomainFamily(domain) {
+    if (!domain) return null;
+    const entry = findFamilyEntry(domain.toLowerCase().trim());
+    return entry ? entry.family : null;
 }
 
 function isValidHostname(name, ip) {
@@ -44,11 +47,6 @@ function isValidHostname(name, ip) {
 
     if (n === "" || n === "risorsa web" || n === ip) return false;
     if (n.endsWith('.in-addr.arpa') || n.endsWith('.ip6.arpa')) return false;
-
-    const genericPatterns = ['1e100.net', 'googleusercontent.com', 'cloudfront.net', 'amazonaws.com'];
-    for (const pattern of genericPatterns) {
-        if (n.includes(pattern)) return false;
-    }
 
     return true;
 }
@@ -124,6 +122,24 @@ function extractSNIFromTLS(buffer) {
         return null;
     }
     return null;
+}
+
+/**
+ * Estrae il dominio dall'header "Host:" di una richiesta HTTP in chiaro (porta 80).
+ * Fallback usato quando il payload catturato non è un ClientHello TLS.
+ */
+function extractHostFromHTTP(buffer) {
+    try {
+        if (!buffer || !Buffer.isBuffer(buffer) || buffer.length < 16) return null;
+
+        const text = buffer.toString('latin1', 0, Math.min(buffer.length, 2048));
+        if (!/^(GET|POST|HEAD|PUT|DELETE|OPTIONS|CONNECT|PATCH)\s/.test(text)) return null;
+
+        const match = /\r?\nHost:\s*([^\r\n]+)/i.exec(text);
+        return match ? match[1].trim() : null;
+    } catch (e) {
+        return null;
+    }
 }
 
 function parseDNSResponse(buffer) {
@@ -295,15 +311,15 @@ async function resolveResourceDetails(remoteIp, packetPayload = null) {
         };
     }
     else if (packetPayload) {
-        const sniDomain = extractSNIFromTLS(packetPayload);
-        if (sniDomain) {
-            const cleanedSNI = normalizeDomain(sniDomain);
-            if (isValidHostname(cleanedSNI, remoteIp)) {
-                ipToDomainMap.set(remoteIp, cleanedSNI);
+        const extractedDomain = extractSNIFromTLS(packetPayload) || extractHostFromHTTP(packetPayload);
+        if (extractedDomain) {
+            const cleanedDomain = normalizeDomain(extractedDomain);
+            if (isValidHostname(cleanedDomain, remoteIp)) {
+                ipToDomainMap.set(remoteIp, cleanedDomain);
                 resolvedDetails = {
-                    hostName: cleanedSNI,
-                    resourceName: cleanedSNI,
-                    technicalSubtitle: sanitizeSubtitle(cleanedSNI, rawHostName)
+                    hostName: cleanedDomain,
+                    resourceName: cleanedDomain,
+                    technicalSubtitle: sanitizeSubtitle(cleanedDomain, rawHostName)
                 };
             }
         }
@@ -339,6 +355,7 @@ async function resolveResourceDetails(remoteIp, packetPayload = null) {
     }
 
     resolvedDetails.provider = detectProvider(remoteIp, resolvedDetails.hostName, resolvedDetails.technicalSubtitle);
+    resolvedDetails.flow = getDomainFamily(resolvedDetails.hostName);
 
     // Salva in cache se la risoluzione ha fornito un nome valido
     if (resolvedDetails.resourceName !== "Risorsa Web" || resolvedDetails.hostName !== remoteIp) {

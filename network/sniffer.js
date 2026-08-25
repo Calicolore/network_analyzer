@@ -55,20 +55,48 @@ function initSniffer(deviceIp, onPacketCaptured) {
                 ret = decoders.TCP(buffer, ret.offset);
                 const remoteIp = (srcIp === deviceIp) ? dstIp : srcIp;
                 const geo = geoip.lookup(remoteIp);
+                const srcPort = ret.info.srcport;
+                const dstPort = ret.info.dstport;
+
+                // Cattura selettiva del payload applicativo: serve solo per estrarre l'SNI
+                // dal ClientHello TLS (porta 443/8443) o l'header Host: da richieste HTTP in
+                // chiaro (porta 80). Copiata SEMPRE con Buffer.from(...) perché `buffer` è un
+                // unico Buffer riutilizzato per ogni pacchetto catturato (vedi riga ~40).
+                let capturedPayload = null;
+                const payloadOffset = ret.offset;
+                const payloadLen = packetSize - payloadOffset;
+
+                if (payloadLen > 0) {
+                    const isTlsPort = dstPort === 443 || dstPort === 8443 || srcPort === 443 || srcPort === 8443;
+                    const isHttpPort = dstPort === 80 || srcPort === 80;
+
+                    if (isTlsPort || isHttpPort) {
+                        const MAX_CAPTURE = 4096;
+                        const end = Math.min(buffer.length, payloadOffset + Math.min(payloadLen, MAX_CAPTURE));
+                        const firstByte = buffer[payloadOffset];
+
+                        // TLS Handshake (ClientHello) inizia sempre con 0x16: scarta a costo
+                        // zero i pacchetti successivi di una connessione TLS già stabilita.
+                        if ((isTlsPort && firstByte === 0x16) || isHttpPort) {
+                            capturedPayload = Buffer.from(buffer.slice(payloadOffset, end));
+                        }
+                    }
+                }
 
                 onPacketCaptured({
                     type: 'TCP',
                     src: srcIp,
                     dst: dstIp,
-                    srcPort: ret.info.srcport,
-                    dstPort: ret.info.dstport,
-                    service: getServiceName(ret.info.dstport),
+                    srcPort,
+                    dstPort,
+                    service: getServiceName(dstPort),
                     country: geo ? geo.country : '??',
                     flags: ret.info.flags,
-                    size: packetSize, 
+                    size: packetSize,
+                    payload: capturedPayload,
                     timestamp: new Date().toLocaleTimeString('it-IT')
                 });
-            } 
+            }
             // --- GESTIONE UDP (Include DNS e QUIC/YouTube) ---
             else if (ret.info.protocol === PROTOCOL.IP.UDP) {
                 ret = decoders.UDP(buffer, ret.offset);
