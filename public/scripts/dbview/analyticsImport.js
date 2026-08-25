@@ -1,6 +1,6 @@
 /**
  * ====================================================================================
- * MODULO IMPORT — IMPORTAZIONE JSON E CAMBIO MODALITÀ LIVE/IMPORTATA (analytics/analyticsImport.js)
+ * MODULO IMPORT — IMPORTAZIONE JSON E CAMBIO MODALITÀ LIVE/IMPORTATA (dbview/analyticsImport.js)
  * ====================================================================================
  * Aggiunge a `window.analyticsExport` (creato in analyticsExportCore.js) i metodi di
  * import file e di switch tra modalità Real Time e DB Importato. Qui si concentrano le

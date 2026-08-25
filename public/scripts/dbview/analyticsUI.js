@@ -1,6 +1,6 @@
 /**
  * ====================================================================================
- * MODULO UI — RENDERING, TABELLE, KPI E FILTRI (analytics/analyticsUI.js)
+ * MODULO UI — RENDERING, TABELLE, KPI E FILTRI (dbview/analyticsUI.js)
  * ====================================================================================
  * Implementa la Protezione dall'aggiornamento Real-Time (Pausa, Paginazione, Throttling
  * DOM e Dropdown Focus) e l'orchestrazione filtro→ordina→pagina→render.

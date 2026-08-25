@@ -1,11 +1,11 @@
 /**
  * ====================================================================================
- * GRAFICO A TORTA DINAMICO (analytics/analyticsChart.js)
+ * GRAFICO A TORTA DINAMICO (dbview/analyticsChart.js)
  * ====================================================================================
  * Disegna/aggiorna il grafico a torta per il parametro selezionato (nazione, servizio,
  * provider, stato), raggruppando in "Altro" le fette sotto la soglia del 2% ed
  * escludendo dal conteggio i valori non definiti (tramite `isUndefinedValue`, usata
- * anche da analytics/analyticsUI.js per il KPI "Nazioni").
+ * anche da dbview/analyticsUI.js per il KPI "Nazioni").
  *
  * Il rendering è invocato da analyticsUI.applyFiltersAndRender() — questo modulo NON
  * scrive più i KPI tile (quella responsabilità è unica in analyticsUI.updateGlobalKpiUI,

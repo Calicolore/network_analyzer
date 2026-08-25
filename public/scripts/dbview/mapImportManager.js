@@ -1,6 +1,6 @@
 /**
  * ====================================================================================
- * GESTORE MAPPA PER DB IMPORTATI (analytics/mapImportManager.js)
+ * GESTORE MAPPA PER DB IMPORTATI (dbview/mapImportManager.js)
  * ====================================================================================
  *
  * SCOPO DEL MODULO:
@@ -22,8 +22,8 @@
  * rotte ricostruite qui NON includono un punto di partenza "Casa/Sorgente" fittizio,
  * ma solo la catena reale: [hop 1, hop 2, ..., destinazione finale].
  *
- * NOTA SULLA CARTELLA: risiede in analytics/ (non in dashboard/) perché è chiamato
- * solo da analytics/analyticsImport.js e gestisce dati di DB importati — pur
+ * NOTA SULLA CARTELLA: risiede in dbview/ (non in dashboard/) perché è chiamato
+ * solo da dbview/analyticsImport.js e gestisce dati di DB importati — pur
  * disegnando sulla stessa mappa Leaflet della vista live.
  * ====================================================================================
  */

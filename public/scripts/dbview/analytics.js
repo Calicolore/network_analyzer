@@ -1,6 +1,6 @@
 /**
  * ====================================================================================
- * CONTROLLER PRINCIPALE ANALYTICS — SPA NAVIGATION, SOCKET.IO & FILTRI (analytics/analytics.js)
+ * CONTROLLER PRINCIPALE ANALYTICS — SPA NAVIGATION, SOCKET.IO & FILTRI (dbview/analytics.js)
  * ====================================================================================
  * Composition root della vista Analytics: cablaggio della navigazione a tab, dei
  * listener Socket.IO che alimentano analyticsState.globalChartSessions in tempo

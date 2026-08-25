@@ -1,6 +1,6 @@
 /**
  * ====================================================================================
- * MODULO API — STATO E CHIAMATE DI RETE (analytics/analyticsApi.js)
+ * MODULO API — STATO E CHIAMATE DI RETE (dbview/analyticsApi.js)
  * ====================================================================================
  * Definisce `window.analyticsState` (l'unico stato condiviso da tutti i moduli
  * Analytics: dataset globale, filtri attivi, paginazione, ordinamento) e

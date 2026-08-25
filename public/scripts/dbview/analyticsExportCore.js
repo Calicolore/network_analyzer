@@ -1,6 +1,6 @@
 /**
  * ====================================================================================
- * MODULO EXPORT — ESPORTAZIONE DATI JSON (analytics/analyticsExportCore.js)
+ * MODULO EXPORT — ESPORTAZIONE DATI JSON (dbview/analyticsExportCore.js)
  * ====================================================================================
  * Crea lo stato condiviso `window.analyticsExport` (isImportedMode, currentImportedKey,
  * savedDatasets) e la parte di export/download. Il file gemello analyticsImport.js
