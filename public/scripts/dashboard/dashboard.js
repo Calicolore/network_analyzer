@@ -1,5 +1,12 @@
 /**
- * Controller Principale - Connessione WebSocket e Orchestrazione (dashboard.js)
+ * ====================================================================================
+ * CONTROLLER PRINCIPALE — CONNESSIONE WEBSOCKET E ORCHESTRAZIONE (dashboard/dashboard.js)
+ * ====================================================================================
+ * Apre la connessione Socket.IO e smista ogni evento in arrivo verso i moduli
+ * mappa/card/filtri/grafico banda già caricati. È l'ultimo file del gruppo
+ * "dashboard" ad essere caricato, quindi può contare sull'esistenza di tutte le
+ * funzioni/global che consuma.
+ * ====================================================================================
  */
 
 const socket = io();
@@ -125,7 +132,7 @@ socket.on('session_closed', (data) => {
     if (isLiveTrafficPaused()) return;
     if (typeof markSessionClosed === 'function') {
         // Passiamo sia l'ID che il motivo della chiusura
-        markSessionClosed(data.sessionId, data.reason); 
+        markSessionClosed(data.sessionId, data.reason);
     }
 });
 
@@ -149,4 +156,7 @@ window.removeSession = function(sessionId) {
 
 if (typeof initSettingsUI === 'function') {
     initSettingsUI();
+}
+if (typeof startAutoCleanupTask === 'function') {
+    startAutoCleanupTask();
 }

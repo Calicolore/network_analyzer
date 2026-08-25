@@ -1,23 +1,11 @@
 /* ====================================================================
  * ANALYTICS & FILTRI PAGE STYLES
+ * ====================================================================
+ * body e gli altri stili condivisi con la vista Dashboard sono in
+ * shared.css. .header-bar (non più usato in index.html) è stato
+ * rimosso; .btn-back resta perché usato dal bottone "Applica" del
+ * filtro data personalizzato.
  * ==================================================================== */
-
-body {
-    background-color: #0f172a;
-    color: #f8fafc;
-    font-family: system-ui, -apple-system, sans-serif;
-    margin: 0;
-    padding: 20px;
-}
-
-.header-bar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding-bottom: 20px;
-    border-bottom: 1px solid #334155;
-    margin-bottom: 20px;
-}
 
 .btn-back {
     background: #334155;
@@ -55,8 +43,10 @@ body {
 }
 
 .filter-group {
+    position: relative;
     display: flex;
     flex-direction: column;
+    align-items: center;
     gap: 5px;
     min-width: 180px;
 }
@@ -73,6 +63,7 @@ body {
     border: 1px solid #334155;
     padding: 8px 12px;
     border-radius: 6px;
+    font-size: 0.9rem;
     outline: none;
     cursor: pointer;
 }

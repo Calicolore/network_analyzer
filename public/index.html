@@ -6,8 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Network Analyzer - Real Time & Analytics</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="style/style.css">
-    <link rel="stylesheet" href="style/analytics.css">
+    <link rel="stylesheet" href="/style/shared.css">
+    <link rel="stylesheet" href="/style/dashboard.css">
+    <link rel="stylesheet" href="/style/analytics.css">
     <style>
         .spa-view.hidden {
             display: none !important;
@@ -367,18 +368,25 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="/socket.io/socket.io.js"></script>
 
-    <script src="scripts/mapManager.js"></script>
-    <script src="scripts/mapImportManager.js"></script>
-    <script src="scripts/filterManager.js"></script>
-    <script src="scripts/bandwidthChart.js"></script>
-    <script src="scripts/uiManager.js"></script>
-    <script src="scripts/settings.js"></script>
-    <script src="scripts/dashboard.js"></script>
-    <script src="scripts/analyticsChart.js"></script>
-    <script src="/scripts/analyticsApi.js"></script>
-    <script src="/scripts/analyticsUI.js"></script>
-    <script src="/scripts/analyticsExport.js"></script>
-    <script src="/scripts/analytics.js"></script>
+    <script src="/scripts/dashboard/mapCore.js"></script>
+    <script src="/scripts/dashboard/mapPopup.js"></script>
+    <script src="/scripts/dashboard/mapRoutes.js"></script>
+    <script src="/scripts/dashboard/mapHighlight.js"></script>
+    <script src="/scripts/analytics/mapImportManager.js"></script>
+    <script src="/scripts/dashboard/filterManager.js"></script>
+    <script src="/scripts/dashboard/bandwidthEngine.js"></script>
+    <script src="/scripts/dashboard/bandwidthFeed.js"></script>
+    <script src="/scripts/dashboard/uiPacketBuffer.js"></script>
+    <script src="/scripts/dashboard/uiCardHelpers.js"></script>
+    <script src="/scripts/dashboard/uiImportedCards.js"></script>
+    <script src="/scripts/dashboard/settings.js"></script>
+    <script src="/scripts/dashboard/dashboard.js"></script>
+    <script src="/scripts/analytics/analyticsChart.js"></script>
+    <script src="/scripts/analytics/analyticsApi.js"></script>
+    <script src="/scripts/analytics/analyticsUI.js"></script>
+    <script src="/scripts/analytics/analyticsExportCore.js"></script>
+    <script src="/scripts/analytics/analyticsImport.js"></script>
+    <script src="/scripts/analytics/analytics.js"></script>
 </body>
 
 </html>

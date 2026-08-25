@@ -1,6 +1,13 @@
 /**
  * ====================================================================================
- * GESTORE FILTRI E RICERCA (filterManager.js)
+ * GESTORE FILTRI E RICERCA (dashboard/filterManager.js)
+ * ====================================================================================
+ * Gestisce i filtri della vista live (ricerca dominio, nazione, servizio/porta,
+ * famiglia/flow): mantiene i valori DISTINCT rilevati dal traffico per popolare i
+ * menu a tendina, e risponde alla domanda "questo pacchetto soddisfa i filtri attivi?"
+ * per ogni card mostrata. Le 4 funzioni extractPacket*() isolano la logica di lettura
+ * di un campo dal pacchetto (con più varianti di nome possibili) sia per l'estrazione
+ * dei valori DISTINCT sia per la verifica del match, evitando di duplicarla nei due punti.
  * ====================================================================================
  */
 

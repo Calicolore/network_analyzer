@@ -1,7 +1,10 @@
 /**
  * ====================================================================================
- * GESTORE GRAFICO BANDA IN TEMPO REALE (bandwidthChart.js)
+ * ALIMENTAZIONE DATI DEL GRAFICO BANDA (dashboard/bandwidthFeed.js)
  * ====================================================================================
+ * Ascolta il traffico live via Socket.IO e accumula i dati per il grafico banda:
+ * buffer storico "Temporale" (line) e mappe di traffico per connessione (bar), sia
+ * per il traffico live sia per un eventuale DB importato.
  *
  * NOTA SULLA MODALITÀ "DB IMPORTATO":
  * Quando è attivo un DB importato (window.analyticsExport.isImportedMode === true),
@@ -12,11 +15,12 @@
  * L'accumulo live NON viene mai azzerato durante la pausa: viene solo "congelato" in una
  * mappa separata, così tornando a Real Time il grafico riprende esattamente da dove
  * si era fermato, senza perdere nulla.
+ *
+ * Dipende da: bandwidthEngine.js (bandwidthChart, currentChartMode, renderLineView,
+ * renderBarView), consumato da esso per aggiornare i dati alla ricezione.
  * ====================================================================================
  */
 
-let bandwidthChart = null;
-let currentChartMode = 'line'; // 'line' | 'bar'
 const MAX_DATA_POINTS = 30;
 
 // Accumulatori di Byte per il secondo corrente (Grafico Temporale, solo traffico live)
@@ -58,7 +62,7 @@ function getActiveColorMap() {
  * Genera colori ad alta luminosità per lo sfondo scuro della dashboard.
  */
 function generateRandomColor() {
-    const letters = '89ABCDEF'; 
+    const letters = '89ABCDEF';
     let color = '#';
     for (let i = 0; i < 6; i++) {
         color += letters[Math.floor(Math.random() * letters.length)];
@@ -72,23 +76,23 @@ function generateRandomColor() {
 function extractConnectionName(packet) {
     if (!packet) return 'Connessione Sconosciuta';
 
-    let name = packet.resourceName || 
-               packet.hostName || 
+    let name = packet.resourceName ||
+               packet.hostName ||
                packet.provider;
 
     if (!name || name === 'Sconosciuto' || name === 'unknown') {
-        name = packet.domain || 
-               packet.hostname || 
-               packet.host || 
-               packet.site || 
+        name = packet.domain ||
+               packet.hostname ||
+               packet.host ||
+               packet.site ||
                packet.service;
     }
 
     if (!name || name === 'Sconosciuto' || name === 'unknown') {
-        name = packet.remoteIp || 
-               packet.dst_ip || 
-               packet.destination || 
-               packet.ip || 
+        name = packet.remoteIp ||
+               packet.dst_ip ||
+               packet.destination ||
+               packet.ip ||
                packet.src_ip;
     }
 
@@ -121,130 +125,6 @@ function extractConnectionNameFromSession(session) {
     }
 
     return name;
-}
-
-function initBandwidthChart() {
-    const ctx = document.getElementById('bandwidthChart')?.getContext('2d');
-    if (!ctx) return;
-
-    bandwidthChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: lineLabels,
-            datasets: [
-                {
-                    label: 'Download (KB/s)',
-                    data: lineDownloadData,
-                    borderColor: '#38bdf8',
-                    backgroundColor: 'rgba(56, 189, 248, 0.1)',
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.3,
-                    pointRadius: 0
-                },
-                {
-                    label: 'Upload (KB/s)',
-                    data: lineUploadData,
-                    borderColor: '#f97316',
-                    backgroundColor: 'rgba(249, 115, 22, 0.1)',
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.3,
-                    pointRadius: 0
-                }
-            ]
-        },
-        options: getLineChartOptions()
-    });
-
-    initBandwidthAccordion();
-    initModeSelector();
-    initSocketListener();
-}
-
-/**
- * Opzioni Grafico Temporale
- */
-function getLineChartOptions() {
-    return {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: { duration: 250 },
-        plugins: {
-            legend: {
-                display: true,
-                labels: { color: '#94a3b8', font: { size: 11 } }
-            },
-            tooltip: {
-                mode: 'index',
-                intersect: false
-            }
-        },
-        scales: {
-            x: {
-                grid: { display: false },
-                ticks: { display: false }
-            },
-            y: {
-                beginAtZero: true,
-                grid: { color: '#334155' },
-                ticks: {
-                    color: '#94a3b8',
-                    font: { size: 10 },
-                    callback: (val) => `${val} KB/s`
-                }
-            }
-        }
-    };
-}
-
-/**
- * Opzioni Grafico a Barre
- */
-function getBarChartOptions() {
-    return {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: { duration: 250 },
-        plugins: {
-            legend: {
-                display: false
-            },
-            tooltip: {
-                enabled: true,
-                callbacks: {
-                    title: (tooltipItems) => `Connessione: ${tooltipItems[0].label}`,
-                    label: (context) => ` Banda richiesta: ${context.raw} KB`
-                }
-            }
-        },
-        scales: {
-            x: {
-                grid: { display: false },
-                ticks: {
-                    color: '#f1f5f9',
-                    font: { size: 11, weight: 'bold' },
-                    maxRotation: 45,
-                    minRotation: 0
-                }
-            },
-            y: {
-                beginAtZero: true,
-                title: {
-                    display: true,
-                    text: 'Connessioni (KB)',
-                    color: '#94a3b8',
-                    font: { size: 12, weight: 'bold' }
-                },
-                grid: { color: '#334155' },
-                ticks: {
-                    color: '#94a3b8',
-                    font: { size: 10 },
-                    callback: (val) => `${val} KB`
-                }
-            }
-        }
-    };
 }
 
 /**
@@ -330,124 +210,9 @@ function updateBandwidthData(downloadKB, uploadKB, isPaused = false) {
     }
 }
 
-function renderLineView() {
-    bandwidthChart.config.type = 'line';
-    bandwidthChart.options = getLineChartOptions();
-
-    bandwidthChart.data.labels = lineLabels;
-    bandwidthChart.data.datasets = [
-        {
-            label: 'Download (KB/s)',
-            data: lineDownloadData,
-            borderColor: '#38bdf8',
-            backgroundColor: 'rgba(56, 189, 248, 0.1)',
-            borderWidth: 2,
-            fill: true,
-            tension: 0.3,
-            pointRadius: 0
-        },
-        {
-            label: 'Upload (KB/s)',
-            data: lineUploadData,
-            borderColor: '#f97316',
-            backgroundColor: 'rgba(249, 115, 22, 0.1)',
-            borderWidth: 2,
-            fill: true,
-            tension: 0.3,
-            pointRadius: 0
-        }
-    ];
-
-    bandwidthChart.update('none');
-}
-
-function renderBarView() {
-    bandwidthChart.config.type = 'bar';
-    bandwidthChart.options = getBarChartOptions();
-
-    const activeTrafficMap = getActiveTrafficMap();
-    const activeColorMap = getActiveColorMap();
-
-    const sortedConnections = Array.from(activeTrafficMap.entries())
-        .sort((a, b) => b[1] - a[1]);
-
-    const connectionLabels = sortedConnections.map(([connName]) => connName);
-    const connectionDataKB = sortedConnections.map(([, bytes]) => (bytes / 1024).toFixed(1));
-    const connectionColors = sortedConnections.map(([connName]) => activeColorMap.get(connName) || '#38bdf8');
-
-    bandwidthChart.data.labels = connectionLabels;
-    bandwidthChart.data.datasets = [
-        {
-            label: isImportedModeActive() ? 'Banda (KB) — DB Importato' : 'Banda (KB)',
-            data: connectionDataKB,
-            backgroundColor: connectionColors,
-            borderColor: connectionColors,
-            borderWidth: 1.5,
-            borderRadius: 4
-        }
-    ];
-
-    bandwidthChart.update('none');
-}
-
-function initModeSelector() {
-    const btnLine = document.getElementById('btn-chart-line');
-    const btnBar = document.getElementById('btn-chart-bar');
-
-    if (!btnLine || !btnBar) return;
-
-    btnLine.addEventListener('click', () => {
-        if (currentChartMode === 'line') return;
-        currentChartMode = 'line';
-        
-        btnLine.classList.add('active');
-        btnBar.classList.remove('active');
-
-        if (bandwidthChart) renderLineView();
-    });
-
-    btnBar.addEventListener('click', () => {
-        if (currentChartMode === 'bar') return;
-        currentChartMode = 'bar';
-
-        btnBar.classList.add('active');
-        btnLine.classList.remove('active');
-
-        if (bandwidthChart) renderBarView();
-    });
-}
-
-function initBandwidthAccordion() {
-    const toggleBtn = document.getElementById('toggle-bandwidth-btn');
-    const container = document.getElementById('bandwidth-container');
-
-    if (toggleBtn && container) {
-        toggleBtn.addEventListener('click', () => {
-            const isHidden = container.style.display === 'none';
-            container.style.display = isHidden ? 'block' : 'none';
-
-            const btnText = toggleBtn.querySelector('.btn-text');
-            const btnIcon = toggleBtn.querySelector('.btn-icon');
-
-            if (btnText) btnText.textContent = isHidden ? 'Nascondi' : 'Mostra';
-            if (btnIcon) btnIcon.textContent = isHidden ? '▲' : '▼';
-
-            if (isHidden && bandwidthChart) {
-                setTimeout(() => {
-                    bandwidthChart.resize();
-                }, 50);
-            }
-        });
-    }
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-    initBandwidthChart();
-});
-
 /**
  * Carica nel grafico "Per Connessione" i totali del DB importato.
- * Chiamata da analyticsExport.js all'importazione di un nuovo DB.
+ * Chiamata da analyticsImport.js all'importazione di un nuovo DB.
  */
 function loadImportedBandwidthData(sessions) {
     importedConnectionTrafficMap.clear();
@@ -476,7 +241,7 @@ function loadImportedBandwidthData(sessions) {
 
 /**
  * Svuota i dati del DB importato dal grafico "Per Connessione".
- * Chiamata da analyticsExport.js al ritorno in modalità Real Time.
+ * Chiamata da analyticsImport.js al ritorno in modalità Real Time.
  */
 function clearImportedBandwidthData() {
     importedConnectionTrafficMap.clear();

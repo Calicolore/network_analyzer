@@ -1,15 +1,15 @@
 /**
  * ====================================================================================
- * GESTORE MAPPA PER DB IMPORTATI (mapImportManager.js)
+ * GESTORE MAPPA PER DB IMPORTATI (analytics/mapImportManager.js)
  * ====================================================================================
  *
  * SCOPO DEL MODULO:
  * Ricostruire graficamente sulla mappa Leaflet (la stessa mappa globale usata dalla
- * dashboard real-time, esposta come `window.map` da mapManager.js) le sessioni
+ * dashboard real-time, esposta come `window.map` da dashboard/mapCore.js) le sessioni
  * provenienti da un file JSON importato, sfruttando i campi `lat`/`lon` della
  * destinazione e l'array `hops` (nodi intermedi di traceroute) salvati su SQLite.
  *
- * Questo modulo è volutamente INDIPENDENTE da mapManager.js:
+ * Questo modulo è volutamente INDIPENDENTE dai file dashboard/map*.js:
  * - Non tocca né legge le strutture dati interne della mappa real-time (`sessionRoutes`,
  *   `activeMarkers`, evidenziazione, ecc.).
  * - Disegna tutto su un proprio Leaflet LayerGroup dedicato, che può essere svuotato
@@ -21,6 +21,10 @@
  * non abbiamo modo di conoscerne la posizione geografica reale. Per questo motivo le
  * rotte ricostruite qui NON includono un punto di partenza "Casa/Sorgente" fittizio,
  * ma solo la catena reale: [hop 1, hop 2, ..., destinazione finale].
+ *
+ * NOTA SULLA CARTELLA: risiede in analytics/ (non in dashboard/) perché è chiamato
+ * solo da analytics/analyticsImport.js e gestisce dati di DB importati — pur
+ * disegnando sulla stessa mappa Leaflet della vista live.
  * ====================================================================================
  */
 
@@ -60,8 +64,8 @@ window.MapImportManager = (function () {
     }
 
     /**
-     * Disegna una linea curva (stessa formula quadratica di Bézier usata in mapManager.js,
-     * duplicata qui volutamente per mantenere il modulo indipendente)
+     * Disegna una linea curva (stessa formula quadratica di Bézier usata in
+     * dashboard/mapRoutes.js, duplicata qui volutamente per mantenere il modulo indipendente)
      */
     function drawImportedCurveLine(layerGroup, start, end, color) {
         const latlngs = [];

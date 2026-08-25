@@ -1,6 +1,18 @@
 /**
- * analyticsChart.js
- * Gestione dei contatori KPI e del grafico a torta dinamico ad alte prestazioni.
+ * ====================================================================================
+ * GRAFICO A TORTA DINAMICO (analytics/analyticsChart.js)
+ * ====================================================================================
+ * Disegna/aggiorna il grafico a torta per il parametro selezionato (nazione, servizio,
+ * provider, stato), raggruppando in "Altro" le fette sotto la soglia del 2% ed
+ * escludendo dal conteggio i valori non definiti (tramite `isUndefinedValue`, usata
+ * anche da analytics/analyticsUI.js per il KPI "Nazioni").
+ *
+ * Il rendering è invocato da analyticsUI.applyFiltersAndRender() — questo modulo NON
+ * scrive più i KPI tile (quella responsabilità è unica in analyticsUI.updateGlobalKpiUI,
+ * per evitare la doppia scrittura che nascondeva la percentuale reale) e non registra
+ * più un proprio listener sul cambio parametro (quello in analytics.js è l'unico,
+ * coerente con gli altri filtri).
+ * ====================================================================================
  */
 
 let analyticsPieChart = null;
@@ -11,14 +23,6 @@ const CHART_COLORS = [
     '#06b6d4', '#6366f1', '#d946ef', '#84cc16', '#64748b'
 ];
 
-function formatBytesChart(bytes) {
-    if (!bytes || bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
-
 /**
  * Verificatore dei valori non definiti o non validi
  */
@@ -28,46 +32,6 @@ function isUndefinedValue(val, param) {
     if (str === '' || str === 'unknown' || str === 'n/a' || str === 'non definito' || str === 'sconosciuta' || str === '-') return true;
     if (param === 'country' && (str === '??' || str === '?')) return true;
     return false;
-}
-
-/**
- * Aggiorna sia i contatori KPI in cima sia il grafico a torta
- */
-function updateAnalyticsDashboard(filteredData = [], totalData = []) {
-    const filteredCount = filteredData.length;
-    const totalCount = totalData.length;
-
-    // 1. KPI Connessioni
-    const connElem = document.getElementById('kpi-connections');
-    const percElem = document.getElementById('kpi-percentage');
-    if (connElem && percElem) {
-        connElem.innerText = `${filteredCount} / ${totalCount}`;
-        const pct = totalCount > 0 ? ((filteredCount / totalCount) * 100).toFixed(1) : '0';
-        percElem.innerText = `(${pct}% del totale DB)`;
-    }
-
-    // 2. KPI Traffico
-    const filteredBytes = filteredData.reduce((acc, row) => acc + (Number(row.total_bytes) || 0), 0);
-    const totalBytes = totalData.reduce((acc, row) => acc + (Number(row.total_bytes) || 0), 0);
-
-    const bwElem = document.getElementById('kpi-bandwidth');
-    const bwSubElem = document.getElementById('kpi-bandwidth-subtext');
-    if (bwElem && bwSubElem) {
-        bwElem.innerText = formatBytesChart(filteredBytes);
-        bwSubElem.innerText = `${formatBytesChart(totalBytes)} totali nel DB`;
-    }
-
-    // 3. KPI Nazioni (esclude nazioni non definite)
-    const uniqueCountries = new Set(
-        filteredData.map(r => r.country).filter(c => !isUndefinedValue(c, 'country'))
-    );
-    const countryElem = document.getElementById('kpi-countries');
-    if (countryElem) {
-        countryElem.innerText = uniqueCountries.size;
-    }
-
-    // 4. Aggiorna Grafico
-    renderAnalyticsChart(filteredData);
 }
 
 /**
@@ -203,15 +167,3 @@ function renderAnalyticsChart(data = []) {
         }
     });
 }
-
-// Event Listener sul cambio parametro
-document.addEventListener('DOMContentLoaded', () => {
-    const paramSelect = document.getElementById('paramSelect');
-    if (paramSelect) {
-        paramSelect.addEventListener('change', () => {
-            if (window.filteredConnections) {
-                renderAnalyticsChart(window.filteredConnections);
-            }
-        });
-    }
-});

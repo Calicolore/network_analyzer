@@ -1,5 +1,13 @@
 /**
- * Controller Principale Analytics - SPA Navigation, Socket.IO & Event Listener (analytics.js)
+ * ====================================================================================
+ * CONTROLLER PRINCIPALE ANALYTICS — SPA NAVIGATION, SOCKET.IO & FILTRI (analytics/analytics.js)
+ * ====================================================================================
+ * Composition root della vista Analytics: cablaggio della navigazione a tab, dei
+ * listener Socket.IO che alimentano analyticsState.globalChartSessions in tempo
+ * reale, e di tutti i listener di filtri/paginazione/ordinamento. Ultimo file del
+ * gruppo "analytics" caricato: può contare su window.analyticsState/analyticsApi/
+ * analyticsUI/analyticsExport già definiti.
+ * ====================================================================================
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -158,6 +166,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // Unico listener sul cambio parametro del grafico a torta (analyticsChart.js non
+    // ne registra più uno proprio, per evitare il doppio render — vedi analyticsChart.js)
     document.getElementById('paramSelect')?.addEventListener('change', () => {
         ui.applyFiltersAndRender(true);
     });

@@ -1,6 +1,17 @@
 /**
- * Modulo UI - Rendering, Tabelle, KPI e Filtri Grafici (analyticsUI.js)
- * Implementa la Protezione dall'aggiornamento Real-Time (Pausa, Paginazione, Throttling DOM e Dropdown Focus)
+ * ====================================================================================
+ * MODULO UI — RENDERING, TABELLE, KPI E FILTRI (analytics/analyticsUI.js)
+ * ====================================================================================
+ * Implementa la Protezione dall'aggiornamento Real-Time (Pausa, Paginazione, Throttling
+ * DOM e Dropdown Focus) e l'orchestrazione filtro→ordina→pagina→render.
+ * Unica fonte di verità per i 5 KPI tile in cima alla vista (vedi updateGlobalKpiUI):
+ * in precedenza analyticsChart.js scriveva gli stessi elementi con valori leggermente
+ * diversi subito prima di questa funzione, nascondendo per sempre la percentuale reale
+ * dietro una stringa statica — quella responsabilità duplicata è stata rimossa da
+ * analyticsChart.js, che ora si occupa solo del grafico a torta.
+ * Dipende da: analyticsChart.js (isUndefinedValue, renderAnalyticsChart — deve caricare
+ * PRIMA di questo file).
+ * ====================================================================================
  */
 
 window.analyticsUI = {
@@ -12,7 +23,7 @@ window.analyticsUI = {
     formatBytes(bytes) {
         if (!bytes || bytes === 0) return '0 B';
         const k = 1024;
-        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     },
@@ -22,6 +33,11 @@ window.analyticsUI = {
         return labels[key] || key;
     },
 
+    /**
+     * Scrive i 5 KPI tile in cima alla vista Analytics. `filteredDataset` è il
+     * risultato dei filtri attivi; il totale (per percentuale e byte complessivi)
+     * viene sempre calcolato sull'intero DB (`state.globalChartSessions`).
+     */
     updateGlobalKpiUI(filteredDataset) {
         const state = window.analyticsState;
         const kpiConn = document.getElementById('kpi-connections');
@@ -31,16 +47,24 @@ window.analyticsUI = {
         const kpiCountries = document.getElementById('kpi-countries');
 
         const dataset = filteredDataset || state.globalChartSessions || [];
+        const totalDataset = state.globalChartSessions || [];
 
-        const totalConnections = dataset.length;
-        const totalBytes = dataset.reduce((acc, s) => acc + (Number(s.total_bytes) || 0), 0);
+        const filteredCount = dataset.length;
+        const totalCount = totalDataset.length;
+
+        const filteredBytes = dataset.reduce((acc, s) => acc + (Number(s.total_bytes) || 0), 0);
+        const totalBytes = totalDataset.reduce((acc, s) => acc + (Number(s.total_bytes) || 0), 0);
+
         const uniqueCountries = new Set(
-            dataset.map(s => s.country || s.country_name).filter(c => c && c !== 'N/A' && c !== 'Sconosciuta')
+            dataset.map(s => s.country).filter(c => !isUndefinedValue(c, 'country'))
         ).size;
 
-        if (kpiConn) kpiConn.innerText = totalConnections.toLocaleString();
-        if (kpiPerc) kpiPerc.innerText = `(Totale Database Filtrato)`;
-        if (kpiBw) kpiBw.innerText = this.formatBytes(totalBytes);
+        if (kpiConn) kpiConn.innerText = `${filteredCount} / ${totalCount}`;
+        if (kpiPerc) {
+            const pct = totalCount > 0 ? ((filteredCount / totalCount) * 100).toFixed(1) : '0';
+            kpiPerc.innerText = `(${pct}% del totale DB)`;
+        }
+        if (kpiBw) kpiBw.innerText = this.formatBytes(filteredBytes);
         if (kpiSub) kpiSub.innerText = `${this.formatBytes(totalBytes)} totali nel DB`;
         if (kpiCountries) kpiCountries.innerText = uniqueCountries;
     },
@@ -151,7 +175,7 @@ window.analyticsUI = {
     },
 
     /**
-     * Protezione Dropdown: Aggiunge opzioni dinamiche solo se l'utente non sta 
+     * Protezione Dropdown: Aggiunge opzioni dinamiche solo se l'utente non sta
      * attualmente interagendo con il select (evita chiusure/reset del menu).
      */
     updateDropdownsWithNewItem(packetData) {
@@ -313,8 +337,8 @@ window.analyticsUI = {
         // 6. Invia al Grafico a Torta (con throttling temporale)
         const now = Date.now();
         if (forceChartUpdate || (now - this.lastChartUpdateTime >= this.CHART_THROTTLE_MS)) {
-            if (typeof updateAnalyticsDashboard === 'function') {
-                updateAnalyticsDashboard(fullFilteredDataset, state.globalChartSessions);
+            if (typeof renderAnalyticsChart === 'function') {
+                renderAnalyticsChart(fullFilteredDataset);
                 this.lastChartUpdateTime = now;
             }
         }
@@ -325,7 +349,7 @@ window.analyticsUI = {
 
         // 8. PROTEZIONE PAGINAZIONE REAL-TIME PER LA TABELLA:
         // Se è un aggiornamento automatico da streaming real-time e l'utente NON è su Pagina 1
-        // (es. sta analizzando Pagina 2 o successive), aggiorniamo i dati in background ma 
+        // (es. sta analizzando Pagina 2 o successive), aggiorniamo i dati in background ma
         // NON ridisegniamo le righe della tabella per evitare slittamenti e glitch visivi.
         if (forceChartUpdate || state.currentPage === 1) {
             this.renderTable(pageTableData);

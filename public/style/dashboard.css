@@ -1,17 +1,10 @@
-body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background-color: #0f172a;
-    color: #f1f5f9;
-    margin: 0;
-    padding: 20px;
-}
-
-h1 {
-    color: #38bdf8;
-    border-bottom: 2px solid #1e293b;
-    padding-bottom: 10px;
-    margin-bottom: 30px;
-}
+/* ====================================================================
+ * STILI VISTA DASHBOARD/MAPPA (live)
+ * ====================================================================
+ * Sezione connessioni attive, mappa Leaflet, grafico banda, barra di
+ * ricerca/filtri live. Gli stili condivisi con la vista Analytics
+ * (body, sidebar impostazioni, overlay) sono in shared.css.
+ * ==================================================================== */
 
 /* --- INTESTAZIONE SEZIONE CON BOTTONE --- */
 .section-header {
@@ -110,7 +103,9 @@ h1 {
     filter: none !important;
 }
 
-/* CARDS NON SELEZIONATE (SCURITE/DIMMED) */
+/* CARDS NON SELEZIONATE (SCURITE/DIMMED) — riservata all'evidenziazione mappa
+   (mapHighlight.js). Distinta da .idle-card (sessione inattiva per timeout,
+   vedi sotto): le due feature non condividono la stessa classe. */
 .session-card.dimmed-card {
     opacity: 0.25 !important;
     filter: grayscale(60%);
@@ -166,7 +161,7 @@ h1 {
     height: 650px;
     min-height: 300px;
     max-height: 85vh;
-    overflow: hidden;          
+    overflow: hidden;
     margin-bottom: 30px;
     box-shadow: 0 4px 10px rgb(0 0 0 / 0.3);
     border-radius: 8px;
@@ -179,10 +174,10 @@ h1 {
     bottom: 0;
     left: 0;
     width: 100%;
-    height: 10px;               
-    cursor: ns-resize;          
-    z-index: 1000;              
-    background: transparent;    
+    height: 10px;
+    cursor: ns-resize;
+    z-index: 1000;
+    background: transparent;
 }
 
 .resize-handle:hover,
@@ -219,88 +214,6 @@ h1 {
     line-height: 1.5 !important;
 }
 
-/* --- SIDEBAR E OVERLAY --- */
-.overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(2px);
-    z-index: 9998;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.3s ease;
-}
-
-.overlay.active {
-    opacity: 1;
-    pointer-events: auto;
-}
-
-.sidebar {
-    position: fixed;
-    top: 0;
-    right: 0;
-    width: 320px;
-    height: 100vh;
-    background: #0f172a;
-    border-left: 1px solid #334155;
-    box-shadow: -5px 0 25px rgba(0, 0, 0, 0.5);
-    z-index: 9999;
-    transform: translateX(100%);
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    display: flex;
-    flex-direction: column;
-    padding: 20px;
-    box-sizing: border-box;
-    color: #f8fafc;
-}
-
-.sidebar.open {
-    transform: translateX(0);
-}
-
-.sidebar-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: 1px solid #334155;
-    padding-bottom: 15px;
-    margin-bottom: 20px;
-}
-
-.sidebar-header h3 {
-    margin: 0;
-    font-size: 1.2em;
-    color: #38bdf8;
-}
-
-.close-btn {
-    background: transparent;
-    border: none;
-    color: #94a3b8;
-    font-size: 1.8em;
-    cursor: pointer;
-    line-height: 1;
-    padding: 0 5px;
-    border-radius: 4px;
-    transition: color 0.2s, background 0.2s;
-}
-
-.close-btn:hover {
-    color: #f1f5f9;
-    background: #334155;
-}
-
-.setting-item {
-    background: #1e293b;
-    padding: 12px 15px;
-    border-radius: 8px;
-    border: 1px solid #334155;
-}
-
 /* Assicura che i tracciati SVG trasparenti/invisibili intercettino comunque i click */
 .leaflet-interactive {
     pointer-events: stroke !important;
@@ -314,107 +227,6 @@ h1 {
 /* Facoltativo: se desideri che anche il titolo cambi colore quando la connessione è chiusa */
 .session-card.closed-card .res-title {
     color: #f87171 !important;
-}
-
-/* --- BARRA FILTRI E RICERCA --- */
-.filter-bar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 12px;
-    background: #1e293b;
-    padding: 12px 16px;
-    border-radius: 8px;
-    border: 1px solid #334155;
-    margin-bottom: 20px;
-}
-
-.filter-group {
-    position: relative;
-    display: flex;
-    align-items: center;
-}
-
-.filter-search {
-    flex-grow: 1;
-    min-width: 250px;
-}
-
-.filter-search input {
-    width: 100%;
-    padding: 8px 32px 8px 12px;
-    background: #0f172a;
-    border: 1px solid #334155;
-    color: #f1f5f9;
-    border-radius: 6px;
-    font-size: 0.9rem;
-    outline: none;
-    transition: border-color 0.2s;
-}
-
-.filter-search input:focus {
-    border-color: #38bdf8;
-    box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
-}
-
-.clear-btn {
-    position: absolute;
-    right: 8px;
-    background: transparent;
-    border: none;
-    color: #94a3b8;
-    font-size: 1.2rem;
-    cursor: pointer;
-    display: none; /* Visibile solo quando c'è testo */
-}
-
-.clear-btn:hover {
-    color: #f1f5f9;
-}
-
-.filter-group select {
-    background: #0f172a;
-    border: 1px solid #334155;
-    color: #f1f5f9;
-    padding: 8px 12px;
-    border-radius: 6px;
-    font-size: 0.9rem;
-    outline: none;
-    cursor: pointer;
-}
-
-.filter-group select:focus {
-    border-color: #38bdf8;
-}
-
-.filter-info {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-    margin-left: auto;
-    font-size: 0.85rem;
-    color: #94a3b8;
-}
-
-.reset-btn {
-    background: #334155;
-    color: #f1f5f9;
-    border: none;
-    padding: 6px 12px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 0.8rem;
-    font-weight: 600;
-    transition: background 0.2s;
-}
-
-.reset-btn:hover {
-    background: #475569;
-}
-
-/* NASCONDE LE CARD CHE NON SODDISFANO I FILTRI */
-.session-card.filter-hidden {
-    display: none !important;
 }
 
 /* BARRA DI RICERCA E FILTRI */
@@ -540,7 +352,7 @@ h1 {
     border-color: #38bdf8;
 }
 
-/* Schede inattive/timeout */
+/* Schede inattive/timeout — distinta da .dimmed-card (evidenziazione mappa, vedi sopra) */
 .session-card.idle-card {
     opacity: 0.5;
     border-color: #64748b !important;

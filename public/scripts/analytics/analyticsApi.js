@@ -1,5 +1,13 @@
 /**
- * Modulo API - Gestione Chiamate di Rete e Stato Dati (analyticsApi.js)
+ * ====================================================================================
+ * MODULO API — STATO E CHIAMATE DI RETE (analytics/analyticsApi.js)
+ * ====================================================================================
+ * Definisce `window.analyticsState` (l'unico stato condiviso da tutti i moduli
+ * Analytics: dataset globale, filtri attivi, paginazione, ordinamento) e
+ * `window.analyticsApi`, che scarica l'intero dataset dal server (`GET /api/sessions`)
+ * per alimentare grafico, filtri e tabella, delegando poi il rendering a
+ * `window.analyticsUI`.
+ * ====================================================================================
  */
 
 window.analyticsState = {

@@ -1,5 +1,13 @@
 /**
- * Gestore del Menu Impostazioni, Sidebar e Pulizia Automatica
+ * ====================================================================================
+ * GESTORE MENU IMPOSTAZIONI, SIDEBAR E PULIZIA AUTOMATICA (dashboard/settings.js)
+ * ====================================================================================
+ * Apertura/chiusura della sidebar impostazioni (condivisa da entrambe le viste) e
+ * timer opzionale di pulizia automatica delle sessioni inattive lato client.
+ * `initSettingsUI()` e `startAutoCleanupTask()` sono chiamate da dashboard.js
+ * all'avvio (DOMContentLoaded) — non vengono auto-invocate qui, per coerenza con
+ * l'orchestrazione centralizzata già usata per gli altri moduli.
+ * ====================================================================================
  */
 
 const openSettingsBtn = document.getElementById('open-settings-btn');
@@ -40,7 +48,16 @@ function initSettingsUI() {
 }
 
 /**
- * Avvia il timer di monitoraggio per la pulizia delle sessioni inattive
+ * Avvia il timer di monitoraggio per la pulizia delle sessioni inattive.
+ * Criterio: ogni secondo controlla l'attributo `data-last-active` di ogni card
+ * (impostato da dashboard.js a ogni pacchetto ricevuto su quella sessione) e, se
+ * il toggle "Pulizia automatica" è attivo e il tempo di inattività supera la soglia
+ * configurata (`cleanup-timeout`, in secondi), marca la card come chiusa tramite
+ * `markSessionClosed` (bordo rosso — vedi uiCardHelpers.js).
+ *
+ * Nota: il parametro `removeSessionCallback` non è usato nel corpo della funzione
+ * (la pulizia è puramente visiva, non rimuove la card né chiude la sessione lato
+ * server) — invocare la funzione senza argomenti è quindi corretto.
  */
 function startAutoCleanupTask(removeSessionCallback) {
     if (cleanupIntervalId) {
@@ -57,7 +74,7 @@ function startAutoCleanupTask(removeSessionCallback) {
         const cards = document.querySelectorAll('.session-card');
         cards.forEach(card => {
             const lastActive = parseInt(card.getAttribute('data-last-active') || '0', 10);
-            
+
             if (lastActive > 0 && (now - lastActive > timeoutMs)) {
                 console.log(`[PULIZIA AUTOMATICA] Marcatura sessione chiusa: ${card.id}`);
                 markSessionClosed(card.id); // Imposta il bordo rosso anziché rimuovere direttamente
