@@ -58,11 +58,22 @@ window.MapImportManager = (function () {
     /**
      * Restituisce (creandolo se necessario) il layer group dedicato ai dati importati.
      *
+     * Crea anche un pane dedicato ('importedPane') con z-index SOPRA 'hitboxPane' (650,
+     * definito in dashboard/mapCore.js): quel pane esiste sempre, anche vuoto, con un
+     * proprio canvas a `pointer-events:auto` che copre l'intera mappa — senza un pane
+     * ancora più in alto, quel canvas (vuoto ma comunque il più in superficie) intercetta
+     * ogni click prima che raggiunga i marker importati, che altrimenti risiedono nel
+     * pane di default (più in basso), impedendo ai loro popup di aprirsi.
+     *
      * @returns {L.LayerGroup|null} Il layer group, o null se `window.map` non è ancora pronta
      */
     function getLayerGroup() {
         if (!window.map) return null;
         if (!importLayerGroup) {
+            if (!window.map.getPane('importedPane')) {
+                window.map.createPane('importedPane');
+                window.map.getPane('importedPane').style.zIndex = 660;
+            }
             importLayerGroup = L.layerGroup().addTo(window.map);
         }
         return importLayerGroup;
@@ -75,14 +86,19 @@ window.MapImportManager = (function () {
      * @param {[number, number]} latLng - Coordinate [lat, lon] del marker
      * @param {string} color - Colore di riempimento (colore della sessione)
      * @param {boolean} isFinal - true se è il marker di destinazione (più grande, bordo bianco)
+     * @param {boolean} isIsolated - true se il marker non è collegato da nessuna linea (nessun
+     *   hop di traceroute disponibile per questa sessione): il bordo viene tratteggiato per
+     *   distinguerlo a colpo d'occhio da un normale punto di destinazione con rotta nota
      * @param {string} [popupHtml] - HTML del popup da associare, se presente
      * @returns {L.CircleMarker} Il marker creato
      */
-    function createImportedMarker(layerGroup, latLng, color, isFinal, popupHtml) {
+    function createImportedMarker(layerGroup, latLng, color, isFinal, isIsolated, popupHtml) {
         const marker = L.circleMarker(latLng, {
+            pane: 'importedPane',
             radius: isFinal ? 8 : 4,
             color: isFinal ? '#ffffff' : color,
             weight: isFinal ? 3 : 1.5,
+            dashArray: isIsolated ? '3, 3' : null,
             fillColor: color,
             fillOpacity: isFinal ? 1 : 0.75,
             interactive: true
@@ -185,6 +201,15 @@ window.MapImportManager = (function () {
             isFinal: true
         });
 
+        /**
+         * Nessun hop noto: la destinazione resta un punto isolato, senza alcuna linea che la
+         * raggiunga. Non è un errore di rendering: significa solo che il traceroute per questa
+         * sessione non ha completato in tempo (molto comune: router intermedi che non
+         * rispondono ai probe ICMP/UDP) — la destinazione stessa resta comunque affidabile,
+         * perché geolocalizzata direttamente dall'IP realmente osservato nel traffico.
+         */
+        const isIsolated = points.length === 1;
+
         // Disegna le linee tra i punti consecutivi
         for (let i = 0; i < points.length - 1; i++) {
             drawImportedCurveLine(layerGroup, points[i].latLng, points[i + 1].latLng, color);
@@ -194,7 +219,8 @@ window.MapImportManager = (function () {
         points.forEach((p, idx) => {
             const extra = p.isFinal
                 ? `<br><span style="color: #10b981; font-size: 0.85em;">Servizio: ${session.service || 'N/A'}</span>
-                   <br><span style="color: #94a3b8; font-size: 0.85em;">Byte totali: ${session.total_bytes || 0}</span>`
+                   <br><span style="color: #94a3b8; font-size: 0.85em;">Byte totali: ${session.total_bytes || 0}</span>
+                   ${isIsolated ? '<br><span style="color: #f59e0b; font-size: 0.8em;">⚠ Nessun dato traceroute disponibile</span>' : ''}`
                 : `<br><span style="color: #64748b; font-size: 0.8em;">Hop #${idx + 1} (transito)</span>`;
 
             const popup = buildPopupHtml(
@@ -204,7 +230,7 @@ window.MapImportManager = (function () {
                 extra
             );
 
-            createImportedMarker(layerGroup, p.latLng, color, p.isFinal, popup);
+            createImportedMarker(layerGroup, p.latLng, color, p.isFinal, p.isFinal && isIsolated, popup);
         });
     }
 
