@@ -22,6 +22,13 @@ window.analyticsExport = {
     savedDatasets: {}
 };
 
+/**
+ * Smista l'export in base allo scope scelto dall'utente. Se lo scope è "Intero
+ * Database" ma è attiva la modalità DB importato, ripiega comunque su
+ * `exportCurrentSession` (che, in quel caso, esporta il dataset importato stesso):
+ * non ha senso interrogare l'API `/api/sessions` per "l'intero database" mentre si
+ * sta visualizzando un file già importato al posto del DB reale.
+ */
 window.analyticsExport.triggerExport = function () {
     const scopeSelect = document.getElementById('export-scope-select');
     const scope = scopeSelect ? scopeSelect.value : 'current';
@@ -33,6 +40,10 @@ window.analyticsExport.triggerExport = function () {
     }
 };
 
+/**
+ * Esporta come JSON il dataset attualmente filtrato/visualizzato (o l'intero dataset
+ * importato, se in modalità DB importato).
+ */
 window.analyticsExport.exportCurrentSession = function () {
     const data = window.filteredConnections || window.analyticsState?.globalChartSessions || [];
 
@@ -45,6 +56,9 @@ window.analyticsExport.exportCurrentSession = function () {
     this.downloadFile(JSON.stringify(data, null, 2), fileName, 'application/json');
 };
 
+/**
+ * Scarica dal server e esporta come JSON l'intero database (ignora i filtri correnti).
+ */
 window.analyticsExport.exportFullDatabase = async function () {
     try {
         const response = await fetch('/api/sessions?exportAll=true');
@@ -66,6 +80,14 @@ window.analyticsExport.exportFullDatabase = async function () {
     }
 };
 
+/**
+ * Avvia il download di un file generato client-side, tramite un link temporaneo
+ * `<a download>` cliccato programmaticamente.
+ *
+ * @param {string} content - Contenuto testuale del file
+ * @param {string} fileName - Nome del file da proporre al download
+ * @param {string} contentType - MIME type del Blob (es. "application/json")
+ */
 window.analyticsExport.downloadFile = function (content, fileName, contentType) {
     const blob = new Blob([content], { type: contentType });
     const url = URL.createObjectURL(blob);

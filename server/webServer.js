@@ -2,11 +2,19 @@
  * ====================================================================================
  * SERVIZIO WEB SERVER E WEBSOCKET (server/webServer.js)
  * ====================================================================================
- * 
+ *
  * SCOPO DEL MODULO:
- * Creare e gestire il server HTTP Express e il canale WebSocket Socket.io per erogare 
- * l'interfaccia grafica utente (dashboard) e trasmettere gli aggiornamenti di rete in real-time.
- * Inserito endpoint API per la consultazione del database SQLite.
+ * Creare e gestire il server HTTP Express e il canale WebSocket Socket.io per erogare
+ * l'interfaccia grafica utente (dashboard) e trasmettere gli aggiornamenti di rete in
+ * real-time. Espone anche `GET /api/sessions`, l'endpoint REST di sola lettura usato
+ * dalla vista Analytics per interrogare lo storico salvato su SQLite (paginato,
+ * filtrabile per intervallo temporale, con statistiche aggregate sull'intero DB).
+ *
+ * Nota: le SCRITTURE su SQLite (sessioni/hop/cache provider) avvengono altrove, in
+ * database/dbService.js, tramite una connessione separata (`better-sqlite3`,
+ * sincrona). Questo modulo apre una propria connessione di sola LETTURA (`sqlite3`,
+ * asincrona) allo stesso file: le due convivono grazie alla modalità WAL abilitata
+ * da dbService.js.
  * ====================================================================================
  */
 
@@ -15,7 +23,6 @@ const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
-const geoip = require('geoip-lite'); // Usato come eventuale fallback locale per la geolocalizzazione
 
 /**
  * Configura e avvia il server HTTP Express con supporto Socket.io e API SQLite
@@ -51,8 +58,8 @@ function startServer(port) {
         const endDate = req.query.endDate;
         const exportAll = req.query.exportAll === 'true';
 
-        let whereClauses = [];
-        let params = [];
+        const whereClauses = [];
+        const params = [];
 
         // Filtri temporali in SQL
         if (timePreset === '1h') {
@@ -148,46 +155,65 @@ function startServer(port) {
         });
     });
 
-    // PASSO 3: Gestione dell'evento di connessione del client Web alla dashboard
-    io.on('connection', async (socket) => {
-        console.log('[DASHBOARD] Client connesso via Socket.io');
+    let cachedHomeCoords = null;
 
-        let dynamicHomeCoords = null; 
-        
+    /**
+     * ================================================================================
+     * GEOLOCALIZZAZIONE DELLA POSIZIONE DEL SERVER (cachata per l'intera vita del processo)
+     * ================================================================================
+     * Geolocalizza la posizione pubblica di QUESTO server (non del client): serve solo
+     * come punto di partenza logico per le rotte disegnate sulla mappa. Risolta al più
+     * una volta e poi cachata in `cachedHomeCoords` — la posizione del server non cambia
+     * tra una connessione e l'altra, quindi rifare le due chiamate HTTP esterne (ipapi.co,
+     * poi ip-api.com di fallback) ad ogni nuova connessione Socket.io — una per ogni tab
+     * aperta o refresh della pagina — sarebbe solo latenza e traffico sprecati.
+     *
+     * @returns {Promise<[number, number]>} Coordinate [lat, lon] della posizione del server
+     *   (coordinate di fallback fisse se anche il secondo servizio esterno fallisce)
+     */
+    async function resolveHomeCoords() {
+        if (cachedHomeCoords) return cachedHomeCoords;
+
         // Tentativo 1 via ipapi.co
         try {
             const response = await fetch('https://ipapi.co/json/');
             const geoData = await response.json();
-            
+
             if (geoData.latitude && geoData.longitude) {
-                dynamicHomeCoords = [geoData.latitude, geoData.longitude];
-                console.log(`[GEOLOC] Posizione rilevata dinamicamente (ipapi): ${geoData.city} [${dynamicHomeCoords}]`);
+                cachedHomeCoords = [geoData.latitude, geoData.longitude];
+                console.log(`[GEOLOC] Posizione rilevata dinamicamente (ipapi): ${geoData.city} [${cachedHomeCoords}]`);
+                return cachedHomeCoords;
             }
         } catch (err) {
             console.log("[GEOLOC] ipapi.co fallito, provo fallback su ip-api.com...");
         }
 
         // Tentativo 2 via ip-api.com (Fallback)
-        if (!dynamicHomeCoords) {
-            try {
-                const response = await fetch('http://ip-api.com/json/');
-                const geoData = await response.json();
-                if (geoData.lat && geoData.lon) {
-                    dynamicHomeCoords = [geoData.lat, geoData.lon];
-                    console.log(`[GEOLOC] Posizione rilevata dinamicamente (ip-api): ${geoData.city} [${dynamicHomeCoords}]`);
-                }
-            } catch (err) {
-                console.log("[GEOLOC] Impossibile recuperare l'IP pubblico locale da server.");
+        try {
+            const response = await fetch('http://ip-api.com/json/');
+            const geoData = await response.json();
+            if (geoData.lat && geoData.lon) {
+                cachedHomeCoords = [geoData.lat, geoData.lon];
+                console.log(`[GEOLOC] Posizione rilevata dinamicamente (ip-api): ${geoData.city} [${cachedHomeCoords}]`);
+                return cachedHomeCoords;
             }
+        } catch (err) {
+            console.log("[GEOLOC] Impossibile recuperare l'IP pubblico locale da server.");
         }
 
-        // Coordinate predefinite di estremo fallback
-        if (!dynamicHomeCoords) {
-            dynamicHomeCoords = [43.7257, 12.6357];
-        }
+        // Coordinate predefinite di estremo fallback (anch'esse cachate: se la rete non
+        // è raggiungibile ora, molto probabilmente non lo sarà nemmeno al prossimo tentativo)
+        cachedHomeCoords = [43.7257, 12.6357];
+        return cachedHomeCoords;
+    }
+
+    // PASSO 3: Gestione dell'evento di connessione del client Web alla dashboard
+    io.on('connection', async (socket) => {
+        console.log('[DASHBOARD] Client connesso via Socket.io');
 
         // Invia le coordinate iniziali di centratura al client appena connesso
-        socket.emit('home_location', { coords: dynamicHomeCoords });
+        const coords = await resolveHomeCoords();
+        socket.emit('home_location', { coords });
     });
 
     // PASSO 4: Avvio dell'ascolto HTTP sulla porta specificata

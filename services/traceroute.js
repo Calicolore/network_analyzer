@@ -61,16 +61,18 @@ function runNativeTraceroute(targetIp, io) {
             if (match) {
                 const hopIp = match[0];
                 
-                // Ignoriamo la destinazione finale (già presente nelle card) e la rete locale
-                if (hopIp === targetIp || hopIp.startsWith('192.168.') || hopIp.startsWith('192.168.1.1')) continue;
+                // Ignoriamo la destinazione finale (già presente nelle card) e la rete locale.
+                // (Il prefisso "192.168." copre già da solo l'intera sottorete locale, incluso
+                // il router "192.168.1.1": un secondo controllo su quel prefisso era ridondante
+                // e in più avrebbe escluso per errore anche IP validi come 192.168.1.10-19/100-199.)
+                if (hopIp === targetIp || hopIp.startsWith('192.168.')) continue;
                 
                 // PASSO 4: Geolocalizzazione del nodo intermedio e identificazione automatica del Provider
+                // Qui è disponibile SOLO l'indirizzo IP numerico dell'hop (nessun hostname:
+                // il comando tracert/traceroute non esegue una reverse DNS), quindi l'unica
+                // euristica applicabile è un confronto sul prefisso IP di blocchi noti.
                 let hopProvider = null;
-                const lowIp = hopIp.toLowerCase();
-                if (lowIp.startsWith('20.') || lowIp.includes('microsoft')) hopProvider = 'Microsoft Azure';
-                else if (lowIp.includes('amazonaws') || lowIp.includes('cloudfront')) hopProvider = 'Amazon AWS';
-                else if (lowIp.includes('google') || lowIp.includes('1e100')) hopProvider = 'Google Cloud';
-                else if (lowIp.includes('cloudflare')) hopProvider = 'Cloudflare';
+                if (hopIp.startsWith('20.')) hopProvider = 'Microsoft Azure';
 
                 const geo = geoip.lookup(hopIp);
                 if (geo && geo.ll) {

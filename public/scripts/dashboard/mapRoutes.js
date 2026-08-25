@@ -12,7 +12,13 @@
  */
 
 /**
- * Disegna la linea curva con un'hitbox d'interazione reattiva
+ * Disegna la linea curva con un'hitbox d'interazione reattiva.
+ *
+ * @param {[number, number]} start - Coordinate [lat, lon] di partenza
+ * @param {[number, number]} end - Coordinate [lat, lon] di arrivo
+ * @param {string} color - Colore della linea (e della sessione)
+ * @param {string} sessionId - Sessione a cui appartiene questa linea (per click/highlight)
+ * @returns {L.Polyline} La linea visibile creata (l'hitbox invisibile è in `._hitbox`)
  */
 function drawCurveLine(start, end, color, sessionId) {
     const latlngs = [];
@@ -96,7 +102,9 @@ function drawCurveLine(start, end, color, sessionId) {
  * renderizzato nel DOM (quindi ne conosciamo l'altezza vera) — sposta la vista verso
  * il basso di metà dell'altezza del popup, così l'INSIEME punto+popup risulta
  * visivamente centrato nel riquadro, invece di stare sui bordi o di lato.
- * ====================================================================================
+ *
+ * @param {L.CircleMarker} marker - Marker il cui popup va aperto
+ * @param {number} [zoomLevel] - Livello di zoom target; se omesso resta quello attuale
  */
 function centerAndOpenPopup(marker, zoomLevel) {
     if (!marker) return;
@@ -131,7 +139,14 @@ function centerAndOpenPopup(marker, zoomLevel) {
 }
 
 /**
- * Crea marker punto sulla mappa
+ * Crea un marker circolare sulla mappa, cliccabile per evidenziare/centrare la sessione.
+ *
+ * @param {[number, number]} latLng - Coordinate [lat, lon] del marker
+ * @param {string} color - Colore di riempimento (colore della sessione)
+ * @param {boolean} [isFinal] - true se è il marker di destinazione (più grande, bordo bianco)
+ * @param {boolean} [isSource] - true se è il marker sorgente (leggermente più grande dei transiti)
+ * @param {string} [sessionId] - Sessione associata; se presente, il marker diventa cliccabile
+ * @returns {L.CircleMarker} Il marker creato
  */
 function createCustomMarker(latLng, color, isFinal = false, isSource = false, sessionId = '') {
     const marker = L.circleMarker(latLng, {
@@ -163,7 +178,11 @@ function createCustomMarker(latLng, color, isFinal = false, isSource = false, se
 }
 
 /**
- * Aggiorna pacchetti sulla mappa
+ * Crea la rotta (sorgente->destinazione) alla prima ricezione di una sessione, oppure
+ * aggiorna il popup di destinazione già esistente con i dati più recenti del pacchetto.
+ *
+ * @param {object} data - Pacchetto arricchito ricevuto dal server (sessionId, lat, lon,
+ *   remoteIp, resourceName, technicalSubtitle, provider, sessionColor, remotePort, ...)
  */
 function updateMapPacket(data) {
     if (!data.lat || !data.lon) return;
@@ -232,7 +251,10 @@ function updateMapPacket(data) {
 }
 
 /**
- * Aggiorna traceroute
+ * Inserisce un nuovo hop intermedio scoperto dal traceroute nella rotta della sessione
+ * corrispondente, ridisegnando l'intera catena di marker/linee tra sorgente e destinazione.
+ *
+ * @param {object} data - Hop di traceroute (targetIp, lat, lon, ip, provider, ...)
  */
 function updateMapTraceroute(data) {
     for (const [sessionId, route] of sessionRoutes.entries()) {
@@ -322,7 +344,9 @@ function updateMapTraceroute(data) {
 }
 
 /**
- * Rimozione sessione dalla mappa
+ * Rimuove dalla mappa tutti gli elementi (linee, hitbox, marker) di una sessione chiusa.
+ *
+ * @param {string} sessionId - Sessione da rimuovere
  */
 function removeSessionFromMap(sessionId) {
     if (currentlyHighlightedSessionId === sessionId) {
@@ -348,7 +372,6 @@ function removeSessionFromMap(sessionId) {
  * activeMarkers restano invariati in memoria. Il ripristino al ritorno da un DB
  * importato è quindi istantaneo e pixel-identico a come si trovava prima della pausa,
  * senza bisogno di richiedere nulla al server.
- * ====================================================================================
  */
 function pauseLiveTraffic() {
     if (map.hasLayer(liveLayerGroup)) {

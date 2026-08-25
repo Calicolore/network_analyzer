@@ -24,7 +24,12 @@ const CHART_COLORS = [
 ];
 
 /**
- * Verificatore dei valori non definiti o non validi
+ * Verificatore dei valori non definiti o non validi.
+ *
+ * @param {*} val - Valore da verificare
+ * @param {string} param - Nome del parametro/colonna (es. "country"), per applicare
+ *   controlli aggiuntivi specifici (es. "??"/"?" solo per le nazioni)
+ * @returns {boolean} true se il valore va considerato non definito
  */
 function isUndefinedValue(val, param) {
     if (!val) return true;
@@ -35,7 +40,10 @@ function isUndefinedValue(val, param) {
 }
 
 /**
- * Disegna o aggiorna in-place il grafico a torta
+ * Disegna o aggiorna in-place il grafico a torta per il parametro correntemente
+ * selezionato in `#paramSelect`.
+ *
+ * @param {object[]} [data] - Dataset filtrato (righe sessione) da rappresentare
  */
 function renderAnalyticsChart(data = []) {
     const canvas = document.getElementById('analyticsPieChart');
@@ -111,6 +119,10 @@ function renderAnalyticsChart(data = []) {
     const labels = Object.keys(counts);
     const values = Object.values(counts);
 
+    // "length - 1" esclude deliberatamente l'ultimo colore della tavolozza (#64748b) dal
+    // ciclo delle fette normali: è lo stesso grigio hardcoded usato qui sopra per "Altro",
+    // riservato solo a quella fetta così non viene mai assegnato per coincidenza a una
+    // categoria reale.
     const bgColors = labels.map((label, i) => {
         if (label === 'Altro') return '#64748b';
         return CHART_COLORS[i % (CHART_COLORS.length - 1)];

@@ -30,12 +30,35 @@
 
 window.MapImportManager = (function () {
 
-    const IMPORT_ROUTE_COLOR_FALLBACK = '#facc15';
     let importLayerGroup = null;
-    let renderedSessionIds = new Set();
 
     /**
-     * Restituisce (creandolo se necessario) il layer group dedicato ai dati importati
+     * Colore deterministico per una sessione importata. `session.sessionColor` non è
+     * MAI presente nei dati reali (non è una colonna persistita su SQLite, né un campo
+     * che l'oggetto sessione live in dbview/analytics.js include): usare solo quello con
+     * un fallback fisso avrebbe fatto disegnare OGNI rotta importata con lo stesso
+     * identico colore. Un hash del session_id/IP dà invece un colore diverso e stabile
+     * per ciascuna sessione, riproducibile identico ad ogni nuovo render.
+     *
+     * @param {object} session - Sessione importata
+     * @returns {string} Colore CSS (hsl) per questa sessione
+     */
+    function colorForSession(session) {
+        if (session.sessionColor) return session.sessionColor;
+
+        const key = session.session_id || session.remote_ip || '';
+        let hash = 0;
+        for (let i = 0; i < key.length; i++) {
+            hash = (hash * 31 + key.charCodeAt(i)) & 0xffffffff;
+        }
+        const hue = Math.abs(hash) % 360;
+        return `hsl(${hue}, 70%, 60%)`;
+    }
+
+    /**
+     * Restituisce (creandolo se necessario) il layer group dedicato ai dati importati.
+     *
+     * @returns {L.LayerGroup|null} Il layer group, o null se `window.map` non è ancora pronta
      */
     function getLayerGroup() {
         if (!window.map) return null;
@@ -46,7 +69,14 @@ window.MapImportManager = (function () {
     }
 
     /**
-     * Disegna un marker circolare per un nodo (hop o destinazione)
+     * Disegna un marker circolare per un nodo (hop o destinazione).
+     *
+     * @param {L.LayerGroup} layerGroup - Layer a cui aggiungere il marker
+     * @param {[number, number]} latLng - Coordinate [lat, lon] del marker
+     * @param {string} color - Colore di riempimento (colore della sessione)
+     * @param {boolean} isFinal - true se è il marker di destinazione (più grande, bordo bianco)
+     * @param {string} [popupHtml] - HTML del popup da associare, se presente
+     * @returns {L.CircleMarker} Il marker creato
      */
     function createImportedMarker(layerGroup, latLng, color, isFinal, popupHtml) {
         const marker = L.circleMarker(latLng, {
@@ -64,8 +94,14 @@ window.MapImportManager = (function () {
     }
 
     /**
-     * Disegna una linea curva (stessa formula quadratica di Bézier usata in
-     * dashboard/mapRoutes.js, duplicata qui volutamente per mantenere il modulo indipendente)
+     * Disegna una linea curva tratteggiata (stessa formula quadratica di Bézier usata in
+     * dashboard/mapRoutes.js, duplicata qui volutamente per mantenere il modulo indipendente).
+     *
+     * @param {L.LayerGroup} layerGroup - Layer a cui aggiungere la linea
+     * @param {[number, number]} start - Coordinate [lat, lon] di partenza
+     * @param {[number, number]} end - Coordinate [lat, lon] di arrivo
+     * @param {string} color - Colore della linea
+     * @returns {L.Polyline} La linea creata
      */
     function drawImportedCurveLine(layerGroup, start, end, color) {
         const latlngs = [];
@@ -99,7 +135,14 @@ window.MapImportManager = (function () {
     }
 
     /**
-     * Costruisce il contenuto HTML del popup per un nodo importato
+     * Costruisce il contenuto HTML del popup per un nodo importato.
+     *
+     * @param {string} title - Titolo del popup (es. "Destinazione (dati importati)")
+     * @param {string} ip - IP del nodo
+     * @param {string} cityOrName - Nome/città del nodo, o l'IP stesso se assente
+     * @param {string} [extra] - Righe HTML aggiuntive (servizio/byte per la destinazione,
+     *   numero hop per i nodi intermedi)
+     * @returns {string} Markup HTML del popup
      */
     function buildPopupHtml(title, ip, cityOrName, extra) {
         return `
@@ -117,13 +160,17 @@ window.MapImportManager = (function () {
     /**
      * Disegna la rotta completa di una singola sessione importata (hop intermedi + destinazione).
      * Non disegna un punto "sorgente": la catena parte dal primo hop noto (se presente).
+     *
+     * @param {L.LayerGroup} layerGroup - Layer a cui aggiungere linee e marker
+     * @param {object} session - Sessione importata (schema snake_case, con eventuale
+     *   array `hops`)
      */
     function renderSessionRoute(layerGroup, session) {
         if (!session || session.lat === null || session.lat === undefined || session.lon === null || session.lon === undefined) {
             return; // Sessione priva di coordinate: non rappresentabile sulla mappa
         }
 
-        const color = session.sessionColor || IMPORT_ROUTE_COLOR_FALLBACK;
+        const color = colorForSession(session);
         const hops = Array.isArray(session.hops) ? [...session.hops].sort((a, b) => a.hop_number - b.hop_number) : [];
 
         // Catena di punti: hop intermedi (se presenti) + destinazione finale
@@ -162,7 +209,9 @@ window.MapImportManager = (function () {
     }
 
     /**
-     * Punto di ingresso pubblico: ricostruisce sulla mappa l'intero dataset importato
+     * Punto di ingresso pubblico: ricostruisce sulla mappa l'intero dataset importato.
+     *
+     * @param {object[]} sessions - Sessioni del DB importato (schema snake_case)
      */
     function renderDataset(sessions) {
         const layerGroup = getLayerGroup();
@@ -180,7 +229,6 @@ window.MapImportManager = (function () {
             renderSessionRoute(layerGroup, session);
             if (session.lat !== null && session.lat !== undefined) {
                 drawnCount++;
-                renderedSessionIds.add(session.session_id || session.sessionId);
             }
         });
 
@@ -194,7 +242,6 @@ window.MapImportManager = (function () {
         if (importLayerGroup) {
             importLayerGroup.clearLayers();
         }
-        renderedSessionIds.clear();
     }
 
     return {

@@ -55,9 +55,9 @@ function initSettingsUI() {
  * configurata (`cleanup-timeout`, in secondi), marca la card come chiusa tramite
  * `markSessionClosed` (bordo rosso — vedi uiCardHelpers.js).
  *
- * Nota: il parametro `removeSessionCallback` non è usato nel corpo della funzione
- * (la pulizia è puramente visiva, non rimuove la card né chiude la sessione lato
- * server) — invocare la funzione senza argomenti è quindi corretto.
+ * @param {Function} [removeSessionCallback] - Non usato nel corpo della funzione (la
+ *   pulizia è puramente visiva, non rimuove la card né chiude la sessione lato server):
+ *   invocare la funzione senza argomenti è corretto, il parametro resta per compatibilità
  */
 function startAutoCleanupTask(removeSessionCallback) {
     if (cleanupIntervalId) {

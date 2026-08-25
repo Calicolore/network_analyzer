@@ -35,6 +35,10 @@ for (const row of getAllProviderCache()) {
 
 /**
  * Restituisce il risultato già cachato (memoria o DB precaricato) per un IP, se presente.
+ *
+ * @param {string} ip - IP di cui recuperare il provider dalla cache
+ * @returns {{isp: string, org: string, asn: string, providerLabel: string}|null} Il
+ *   risultato cachato, o null se l'IP non è mai stato risolto
  */
 function getCachedProvider(ip) {
     return providerCache.get(ip) || null;
@@ -42,7 +46,11 @@ function getCachedProvider(ip) {
 
 /**
  * Interroga ip-api.com per un singolo IP con timeout esplicito.
- * Ritorna null in caso di errore, timeout o rate-limit lato servizio.
+ *
+ * @param {string} ip - IP pubblico da geolocalizzare/identificare
+ * @returns {Promise<{isp: string|null, org: string|null, asn: string|null,
+ *   providerLabel: string|null}|null>} Dati del provider, o null in caso di errore,
+ *   timeout o rate-limit lato servizio
  */
 async function fetchProviderFromApi(ip) {
     const controller = new AbortController();
@@ -110,9 +118,17 @@ async function processQueue() {
 }
 
 /**
- * Mette in coda la risoluzione del provider per un IP pubblico, deduplicando le richieste
- * concorrenti sullo stesso IP e rispettando un cooldown dopo un fallimento recente.
- * `onResolved(ip, result)` viene chiamato solo in caso di successo.
+ * ================================================================================
+ * ACCODAMENTO RISOLUZIONE PROVIDER (fire-and-forget, con dedup e cooldown)
+ * ================================================================================
+ * Mette in coda la risoluzione del provider per un IP pubblico, deduplicando le
+ * richieste concorrenti sullo stesso IP (già in cache o già in coda) e rispettando
+ * un cooldown dopo un fallimento recente, per non intasare la coda ritentando subito
+ * lo stesso IP che ha appena fallito.
+ *
+ * @param {string} ip - IP pubblico di cui risolvere il provider
+ * @param {(ip: string, result: {isp: string, org: string, asn: string,
+ *   providerLabel: string}) => void} onResolved - Chiamata solo in caso di successo
  */
 function enqueueProviderLookup(ip, onResolved) {
     if (isPrivateIp(ip)) return;

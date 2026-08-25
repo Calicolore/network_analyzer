@@ -154,6 +154,11 @@ tr:hover {
     color: #fef08a;
 }
 
+.status-closed {
+    background: #7f1d1d;
+    color: #fca5a5;
+}
+
 .pagination-bar {
     display: flex;
     justify-content: space-between;

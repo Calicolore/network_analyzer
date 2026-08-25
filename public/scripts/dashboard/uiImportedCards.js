@@ -32,7 +32,11 @@ function resumeLiveCards() {
 
 /**
  * Costruisce una card "compatta" per una sessione proveniente da un DB importato
- * (niente log pacchetti in tempo reale: quel dato semplicemente non esiste per una sessione storica)
+ * (niente log pacchetti in tempo reale: quel dato semplicemente non esiste per una
+ * sessione storica).
+ *
+ * @param {object} session - Riga sessione dal DB importato (schema snake_case)
+ * @returns {HTMLDivElement} Il nodo card creato (non ancora inserito nel DOM)
  */
 function createImportedCardNode(session) {
     const sessionDiv = document.createElement('div');
@@ -93,7 +97,9 @@ function clearImportedCards() {
 }
 
 /**
- * Ricostruisce nell'area "Comunicazioni Attive" le card di tutte le sessioni del DB importato
+ * Ricostruisce nell'area "Comunicazioni Attive" le card di tutte le sessioni del DB importato.
+ *
+ * @param {object[]} sessions - Sessioni del DB importato (schema snake_case)
  */
 function renderImportedCards(sessions) {
     const targetDashboard = dashboard || document.getElementById('dashboard');

@@ -28,7 +28,22 @@ const SERVICE_DESCRIPTIONS = {
 };
 
 /**
- * Genera l'HTML del Popup con Descrizioni Contestuali per un singolo hop di una rotta
+ * ================================================================================
+ * GENERAZIONE HTML DEL POPUP DI UN SINGOLO HOP
+ * ================================================================================
+ * Costruisce titolo, nome/link, sottotitolo DNS, badge provider, box di descrizione
+ * contestuale (datacenter noto, origine locale, o servizio noto sulla porta) e i
+ * pulsanti Prec/Succ per navigare gli altri hop della stessa rotta.
+ *
+ * @param {string} sessionId - Identificativo sessione (remoteIp:remotePort) della rotta
+ * @param {number} currentIndex - Indice di questo hop nella rotta (0 = sorgente)
+ * @param {number} totalHops - Numero totale di hop nella rotta
+ * @param {string} currentIp - IP di questo hop
+ * @param {string} currentCity - Nome/città risolti per questo hop (o IP/placeholder)
+ * @param {number|string} remotePort - Porta remota della connessione (solo per l'ultimo hop)
+ * @param {string} technicalSubtitle - Sottotitolo tecnico (es. hostname reverse-DNS)
+ * @param {string|null} providerName - Provider/hosting riconosciuto per questo hop, se noto
+ * @returns {string} Markup HTML del popup, pronto per Leaflet `bindPopup`/`setPopupContent`
  */
 function getHopPopupHTML(sessionId, currentIndex, totalHops, currentIp, currentCity, remotePort, technicalSubtitle, providerName) {
     const isFirst = currentIndex === 0;
@@ -78,7 +93,12 @@ function getHopPopupHTML(sessionId, currentIndex, totalHops, currentIp, currentC
     if (isFirst) {
         nameRow = `<span style="color: #cbd5e1;">Nome: ${nameDisplay}</span>`;
     } else {
-        const isDomain = nameDisplay.includes('.') && nameDisplay !== currentIp && !nameDisplay.startsWith('192.168');
+        // Un IP privato mostrato come "nome" (identificazione fallita per un hop sulla
+        // propria LAN) non va reso come link cliccabile "Apri sito web": non esiste un
+        // sito pubblico raggiungibile su quell'indirizzo. Copre tutte le classi RFC1918,
+        // non solo 192.168.x.x.
+        const isPrivateHostIp = /^(192\.168\.|10\.|172\.(1[6-9]|2\d|3[0-1])\.|127\.)/.test(nameDisplay);
+        const isDomain = nameDisplay.includes('.') && nameDisplay !== currentIp && !isPrivateHostIp;
 
         if (isDomain) {
             nameRow = `<span style="color: #cbd5e1;">Nome: <a href="https://${nameDisplay}" target="_blank" style="color: #38bdf8; text-decoration: underline;" title="Apri sito web">🌐 ${nameDisplay}</a></span>`;

@@ -16,6 +16,15 @@ let sortThrottleTimeout = null;
 // ================================================================================
 // CREAZIONE ED AGGIORNAMENTO NODO CARD
 // ================================================================================
+/**
+ * Crea il nodo DOM di una nuova card di sessione: titolo, badge paese/provider/flow,
+ * contatore banda e contenitore log pacchetti. Le sotto-parti vengono cachate come
+ * proprietà del nodo (`_titleDiv`, `_meterEl`, ecc.) per aggiornamenti successivi
+ * rapidi senza dover ri-interrogare il DOM con `querySelector`.
+ *
+ * @param {object} data - Primo pacchetto della sessione (fornisce i dati iniziali)
+ * @returns {HTMLDivElement} Il nodo card creato (non ancora inserito nel DOM)
+ */
 function createCardNode(data) {
     const sessionDiv = document.createElement('div');
     sessionDiv.id = data.sessionId;
@@ -64,6 +73,9 @@ function createCardNode(data) {
 
 /**
  * Aggiorna testo e visibilità di un badge (provider/flow) sulla card.
+ *
+ * @param {HTMLElement|null} badgeEl - Elemento badge da aggiornare (può essere assente)
+ * @param {string} value - Nuovo valore; se vuoto/falsy il badge viene nascosto
  */
 function updateBadge(badgeEl, value) {
     if (!badgeEl) return;
@@ -75,6 +87,16 @@ function updateBadge(badgeEl, value) {
     }
 }
 
+/**
+ * Aggiorna titolo, sottotitolo DNS, contatore banda e badge di una card esistente.
+ * Il titolo viene sostituito solo se quello attuale è "generico" (isGeneric, es. IP
+ * nudo o dominio CDN) e il nuovo nome in arrivo è migliore, per non far "regredire"
+ * una card che ha già un buon nome quando un pacchetto successivo porta un dato peggiore.
+ *
+ * @param {HTMLDivElement} sessionDiv - Nodo card da aggiornare (con i riferimenti
+ *   cachati da createCardNode)
+ * @param {object} data - Ultimo pacchetto ricevuto per questa sessione
+ */
 function updateCardHeader(sessionDiv, data) {
     const titleDiv = sessionDiv._titleDiv;
     const subContainer = sessionDiv._subContainer;
@@ -127,6 +149,8 @@ function updateCardHeader(sessionDiv, data) {
 /**
  * Applica un aggiornamento provider arrivato in differita (evento 'provider_resolved')
  * a tutte le card già create per lo stesso IP remoto (più sessioni/porte possono condividerlo).
+ *
+ * @param {{remoteIp: string, provider: string}} payload - Dati dell'evento 'provider_resolved'
  */
 function applyProviderUpdate(payload) {
     if (!payload || !payload.remoteIp) return;
@@ -141,6 +165,11 @@ function applyProviderUpdate(payload) {
 // ================================================================================
 // ORDINAMENTO CARD ED ELIMINAZIONE
 // ================================================================================
+/**
+ * Riordina le card per KB totali decrescenti, con throttling (max una volta al
+ * secondo): riordinare il DOM ad ogni singolo pacchetto sarebbe troppo costoso col
+ * traffico live che arriva in continuazione.
+ */
 function sortCardsByUsage() {
     if (sortThrottleTimeout) return;
 
@@ -176,6 +205,11 @@ function sortCardsByUsage() {
     }, 1000);
 }
 
+/**
+ * Rimuove dal DOM la card di una sessione.
+ *
+ * @param {string} sessionId - Sessione la cui card va rimossa
+ */
 function removeSessionCard(sessionId) {
     const sessionDiv = document.getElementById(sessionId);
     if (sessionDiv) sessionDiv.remove();
@@ -186,6 +220,10 @@ function removeSessionCard(sessionId) {
  * (attenuata in grayscale, classe 'idle-card' — distinta da 'dimmed-card', riservata
  * all'evidenziazione mappa in mapHighlight.js: le due feature non devono condividere
  * la stessa classe, altrimenti evidenziare una rotta cancellerebbe questo stato).
+ *
+ * @param {string} sessionId - Sessione da marcare
+ * @param {string} reason - Motivo della chiusura ('Idle Timeout' per inattività,
+ *   qualunque altro valore per chiusura normale/reset)
  */
 function markSessionClosed(sessionId, reason) {
     const sessionDiv = document.getElementById(sessionId);

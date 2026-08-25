@@ -10,6 +10,10 @@
  * ====================================================================================
  */
 
+/**
+ * Collega i controlli dell'header (selettore DB importati, input file, pulsante
+ * reset, pulsante export) ai rispettivi metodi.
+ */
 window.analyticsExport.initHeaderControls = function () {
     const selectDb = document.getElementById('select-imported-db');
     const fileInput = document.getElementById('input-header-import-file');
@@ -48,6 +52,12 @@ window.analyticsExport.initHeaderControls = function () {
     }
 };
 
+/**
+ * Legge e valida un file JSON esportato, lo aggiunge ai dataset disponibili e passa
+ * subito in modalità DB importato su quel file.
+ *
+ * @param {File} file - File selezionato dall'utente (atteso .json)
+ */
 window.analyticsExport.importFile = function (file) {
     if (!file) return;
 
@@ -81,6 +91,11 @@ window.analyticsExport.importFile = function (file) {
     reader.readAsText(file);
 };
 
+/**
+ * Ricostruisce il menu a tendina dei DB importati disponibili.
+ *
+ * @param {string} selectedFileName - Nome del file da selezionare come attivo
+ */
 window.analyticsExport.updateDropdownMenu = function (selectedFileName) {
     const selectDb = document.getElementById('select-imported-db');
     if (!selectDb) return;
@@ -107,6 +122,16 @@ window.analyticsExport.updateDropdownMenu = function (selectedFileName) {
     selectDb.appendChild(newOpt);
 };
 
+/**
+ * ================================================================================
+ * ATTIVAZIONE MODALITÀ "DB IMPORTATO"
+ * ================================================================================
+ * Passa in modalità DB importato su un dataset già caricato: mette in pausa mappa/
+ * card/grafico banda live (senza distruggerli), poi ricostruisce mappa/card/grafico
+ * con i soli dati del file importato.
+ *
+ * @param {string} fileName - Chiave in `this.savedDatasets` del dataset da attivare
+ */
 window.analyticsExport.switchImportedDb = function (fileName) {
     const data = this.savedDatasets[fileName];
     if (!data) return;
@@ -166,6 +191,14 @@ window.analyticsExport.switchImportedDb = function (fileName) {
     }
 };
 
+/**
+ * ================================================================================
+ * RIPRISTINO DELLA MODALITÀ REAL TIME
+ * ================================================================================
+ * Esce dalla modalità DB importato: rimuove le rotte/card ricostruite dal DB
+ * importato e riprende il traffico live esattamente da dove era stato messo in
+ * pausa (mappa e card live non erano mai state distrutte, solo nascoste).
+ */
 window.analyticsExport.resetToLiveMode = function () {
     this.isImportedMode = false;
     this.currentImportedKey = null;

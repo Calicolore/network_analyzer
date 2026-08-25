@@ -13,7 +13,10 @@
  */
 
 /**
- * Funzione unificata per applicare o rimuovere l'highlight/dimming (Mappa + Dashboard)
+ * Evidenzia una rotta sulla mappa e la card corrispondente, attenuando tutte le altre
+ * (toggle: richiamarla sulla sessione già evidenziata rimuove l'evidenziazione).
+ *
+ * @param {string} sessionId - Sessione da evidenziare
  */
 window.highlightSession = function(sessionId) {
     if (currentlyHighlightedSessionId === sessionId) {
@@ -110,7 +113,10 @@ map.on('click', (e) => {
 });
 
 /**
- * Invocato al click sulla Card: gestisce il toggle dell'highlight e centra la mappa
+ * Invocato al click sulla card: gestisce il toggle dell'highlight e centra la mappa
+ * sull'ultimo hop (la destinazione) della rotta.
+ *
+ * @param {string} sessionId - Sessione da evidenziare/centrare
  */
 window.focusLastHop = function(sessionId) {
     if (currentlyHighlightedSessionId === sessionId) {
@@ -128,7 +134,10 @@ window.focusLastHop = function(sessionId) {
 };
 
 /**
- * Invocato dai pulsanti Prec/Succ nel popup: naviga verso un altro hop della stessa rotta
+ * Invocato dai pulsanti Prec/Succ nel popup: naviga verso un altro hop della stessa rotta.
+ *
+ * @param {string} sessionId - Sessione/rotta a cui appartiene l'hop
+ * @param {number} targetIndex - Indice dell'hop di destinazione nella rotta
  */
 window.navigateHop = function(sessionId, targetIndex) {
     const route = sessionRoutes.get(sessionId);

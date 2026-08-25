@@ -73,7 +73,10 @@ window.analyticsApi = {
     },
 
     /**
-     * Scarica tutte le sessioni dal DB per filtri, esportazione e grafico a torta
+     * Scarica tutte le sessioni dal DB per filtri, esportazione e grafico a torta.
+     *
+     * @returns {Promise<object[]>} Tutte le sessioni corrispondenti al preset temporale
+     *   corrente (`state.currentTimePreset`/`customStart`/`customEnd`)
      */
     async fetchAllFilteredForExport() {
         const state = window.analyticsState;

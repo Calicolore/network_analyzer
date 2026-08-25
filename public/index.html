@@ -4,11 +4,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Network Analyzer - Real Time & Analytics</title>
+    <title>Network Analyzer - Real Time &amp; Analytics</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="/style/shared.css">
     <link rel="stylesheet" href="/style/dashboard.css">
     <link rel="stylesheet" href="/style/analytics.css">
+    <!--
+        Regole minime di navigazione SPA (toggle Mappa/Analytics), lasciate qui inline
+        invece che in un file .css condiviso perché riguardano solo il meccanismo di
+        cambio-vista gestito da dbview/analytics.js, non lo stile delle due viste.
+    -->
     <style>
         .spa-view.hidden {
             display: none !important;
@@ -51,6 +56,7 @@
                 </button>
             </div>
 
+            <!-- NAVIGAZIONE TRA LE DUE VISTE (SPA, gestita da dbview/analytics.js) -->
             <button id="nav-btn-live" class="nav-link active"
                 style="background: #334155; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.9em;">
                 🌐 Mappa
@@ -192,6 +198,9 @@
             <div style="height: 260px; position: relative; width: 100%; display: flex; justify-content: center;">
                 <canvas id="analyticsPieChart"></canvas>
             </div>
+            <!-- Nome id storico (non un placeholder rotto): popolato da dbview/analyticsChart.js
+                 con il conteggio di connessioni escluse perché hanno un valore non definito
+                 per il parametro selezionato -->
             <div id="undefined-stats-info"
                 style="margin-top: 15px; font-size: 0.85em; color: #94a3b8; text-align: center; border-top: 1px solid #334155; padding-top: 10px;">
             </div>
@@ -199,7 +208,7 @@
 
         <!-- 3. SEZIONE FILTRI & ESPORTAZIONE -->
         <div class="filter-section">
-            <h3>🔍 Selezione Filtri Database & Esportazione</h3>
+            <h3>🔍 Selezione Filtri Database &amp; Esportazione</h3>
             <p style="color: #94a3b8; font-size: 0.9em; margin-bottom: 10px;">
                 Filtra i record memorizzati nel Database SQLite per parametro o intervallo temporale.
             </p>
@@ -363,7 +372,18 @@
         </div>
     </aside>
 
-    <!-- DIPENDENZE ED ESECUZIONE MODULI -->
+    <!--
+        ====================================================================
+        DIPENDENZE ED ESECUZIONE MODULI
+        ====================================================================
+        Script classici (non ES module): ogni file gira nello stesso scope
+        globale condiviso, quindi l'ORDINE conta — un file può contare solo
+        su funzioni/variabili già dichiarate da uno script caricato PRIMA di
+        lui. I gruppi dashboard/* e dbview/* riflettono lo split di ex file
+        monolitici (es. mapManager.js -> mapCore/mapPopup/mapRoutes/
+        mapHighlight): l'ordine interno a ciascun gruppo è vincolato dalle
+        dipendenze tra quei pezzi, vedi il commento di testa di ogni file.
+    -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="/socket.io/socket.io.js"></script>

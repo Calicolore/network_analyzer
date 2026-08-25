@@ -20,6 +20,8 @@ const FLUSH_INTERVAL_MS = 100; // Processa i pacchetti ogni 100ms
 /**
  * Funzione invocata all'arrivo di ogni pacchetto WebSocket.
  * Gestisce sia pacchetti singoli che array (batch) srotolandoli nel buffer.
+ *
+ * @param {object|object[]} data - Pacchetto singolo, o array di pacchetti
  */
 function renderPacketCard(data) {
     if (!data) return;
@@ -34,7 +36,13 @@ function renderPacketCard(data) {
 setInterval(flushPacketBuffer, FLUSH_INTERVAL_MS);
 
 /**
- * Elabora tutti i pacchetti accumulati nel buffer in un unico blocco.
+ * ================================================================================
+ * FLUSH DEL BUFFER PACCHETTI VERSO IL DOM
+ * ================================================================================
+ * Elabora tutti i pacchetti accumulati dall'ultimo flush in un unico blocco,
+ * raggruppati per sessione: crea la card mancante, aggiorna intestazione/banda,
+ * appende le righe di log e aggiorna i dataset dei filtri — un solo giro di
+ * operazioni DOM per sessione anche se sono arrivati più pacchetti nell'intervallo.
  */
 function flushPacketBuffer() {
     if (packetBuffer.length === 0) return;

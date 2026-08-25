@@ -28,7 +28,10 @@ const activeFilters = {
 let onFilterChangeCallback = null;
 
 /**
- * Estrae il nome dell'host/dominio provando tutte le proprietà possibili del pacchetto
+ * Estrae il nome dell'host/dominio provando tutte le proprietà possibili del pacchetto.
+ *
+ * @param {object} packet - Pacchetto/connessione da cui estrarre il dominio
+ * @returns {string} Dominio/host in minuscolo, o stringa vuota se non presente
  */
 function extractPacketHost(packet) {
     if (!packet) return '';
@@ -48,7 +51,10 @@ function extractPacketHost(packet) {
 }
 
 /**
- * Estrae la Nazione provando le varianti di proprietà
+ * Estrae la Nazione provando le varianti di proprietà.
+ *
+ * @param {object} packet - Pacchetto/connessione da cui estrarre la nazione
+ * @returns {string} Nazione, o stringa vuota se non presente
  */
 function extractPacketCountry(packet) {
     if (!packet) return '';
@@ -56,7 +62,10 @@ function extractPacketCountry(packet) {
 }
 
 /**
- * Estrae il Servizio / Porta provando le varianti di proprietà
+ * Estrae il Servizio / Porta provando le varianti di proprietà.
+ *
+ * @param {object} packet - Pacchetto/connessione da cui estrarre il servizio
+ * @returns {string} Nome del servizio o "PORT-<numero>", o stringa vuota se non presente
  */
 function extractPacketService(packet) {
     if (!packet) return '';
@@ -68,7 +77,10 @@ function extractPacketService(packet) {
 }
 
 /**
- * Estrae la famiglia/flow (raggruppamento per sito/servizio, es. domini satellite di x.com)
+ * Estrae la famiglia/flow (raggruppamento per sito/servizio, es. domini satellite di x.com).
+ *
+ * @param {object} packet - Pacchetto/connessione da cui estrarre la famiglia
+ * @returns {string} Identificativo di famiglia, o stringa vuota se non presente
  */
 function extractPacketFlow(packet) {
     if (!packet) return '';
@@ -76,7 +88,10 @@ function extractPacketFlow(packet) {
 }
 
 /**
- * Inizializza i listener degli eventi sugli elementi del DOM
+ * Inizializza i listener degli eventi sugli elementi del DOM dei filtri.
+ *
+ * @param {() => void} renderCallback - Chiamata ogni volta che un filtro cambia,
+ *   per far ridisegnare le card alla dashboard
  */
 function initFilterManager(renderCallback) {
     onFilterChangeCallback = renderCallback;
@@ -118,8 +133,10 @@ function initFilterManager(renderCallback) {
 }
 
 /**
- * Registra i dati di una nuova connessione/pacchetto
- * e aggiorna i menu a tendina se compaiono valori DISTINCT non ancora registrati.
+ * Registra i dati di una nuova connessione/pacchetto e aggiorna i menu a tendina se
+ * compaiono valori DISTINCT non ancora registrati.
+ *
+ * @param {object} packet - Pacchetto/connessione appena ricevuto
  */
 function updateAvailableFilters(packet) {
     if (!packet) return;
@@ -201,7 +218,10 @@ function renderFilterDropdowns() {
 }
 
 /**
- * Verifica se un pacchetto/connessione soddisfa tutti i filtri attivi
+ * Verifica se un pacchetto/connessione soddisfa tutti i filtri attivi.
+ *
+ * @param {object} packet - Pacchetto/connessione da valutare
+ * @returns {boolean} true se il pacchetto soddisfa tutti i filtri attivi
  */
 function isPacketMatchingFilters(packet) {
     if (!packet) return true;

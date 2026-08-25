@@ -10,6 +10,9 @@
  */
 
 const socket = io();
+// Esposta su window così bandwidthFeed.js (che carica prima ma si connette solo su
+// DOMContentLoaded) riusa QUESTA connessione invece di aprirne una seconda indipendente.
+window.socket = socket;
 
 // Mappa in memoria per tracciare i dati aggiornati di ciascuna sessione
 const sessionsMap = new Map();
@@ -20,6 +23,8 @@ const sessionsMap = new Map();
  * aggiornamento di sessionsMap, niente DOM, niente mappa): lo sniffing lato server
  * continua a scrivere sul DB, ma il client smette letteralmente di occuparsene finché
  * non si preme "Torna a Real Time".
+ *
+ * @returns {boolean} true se il traffico live è in pausa (DB importato attivo)
  */
 function isLiveTrafficPaused() {
     return !!(window.analyticsExport && window.analyticsExport.isImportedMode);
@@ -83,36 +88,12 @@ socket.on('packet_batch', (packets) => {
     });
 });
 
-// Mantenuto per retrocompatibilità con eventi singoli isolati
-socket.on('new_packet', (data) => {
-    if (isLiveTrafficPaused()) return;
-    if (!data || !data.sessionId) return;
-
-    sessionsMap.set(data.sessionId, data);
-
-    if (window.filterManager) {
-        window.filterManager.updateAvailableFilters(data);
-    }
-
-    requestAnimationFrame(() => {
-        if (isLiveTrafficPaused()) return;
-
-        if (typeof renderPacketCard === 'function') {
-            renderPacketCard(data);
-        }
-
-        const card = document.getElementById(data.sessionId);
-        if (card) {
-            const matchesFilter = !window.filterManager || window.filterManager.isPacketMatchingFilters(data);
-            card.style.display = matchesFilter ? '' : 'none';
-            card.setAttribute('data-last-active', Date.now());
-        }
-
-        if (typeof updateMapPacket === 'function') {
-            updateMapPacket(data);
-        }
-    });
-});
+// Nota: 'new_packet' NON viene ascoltato qui. app.js emette ogni pacchetto sia dentro
+// 'packet_batch' sia singolarmente come 'new_packet' (per eventuali listener esterni),
+// ma per QUESTO modulo sono sempre lo stesso dato: un secondo listener che rifacesse
+// qui la stessa elaborazione duplicherebbe ogni riga nel log pacchetti delle card.
+// bandwidthFeed.js e dbview/analytics.js ascoltano invece 'new_packet' legittimamente,
+// perché non hanno un proprio handler 'packet_batch' con cui altrimenti duplicherebbero.
 
 socket.on('traceroute_hop', (data) => {
     if (isLiveTrafficPaused()) return;
@@ -136,6 +117,11 @@ socket.on('session_closed', (data) => {
     }
 });
 
+/**
+ * Ri-applica i filtri attivi a tutte le card già in `sessionsMap`, mostrando/nascondendo
+ * ciascuna in base al match — invocata dal callback di filterManager quando l'utente
+ * cambia un filtro, senza dover attendere il prossimo pacchetto.
+ */
 function applyFiltersToDashboardUI() {
     if (isLiveTrafficPaused()) return;
 
@@ -148,6 +134,11 @@ function applyFiltersToDashboardUI() {
     });
 }
 
+/**
+ * Rimuove completamente una sessione da stato client, card e mappa.
+ *
+ * @param {string} sessionId - Sessione da rimuovere
+ */
 window.removeSession = function(sessionId) {
     sessionsMap.delete(sessionId);
     if (typeof removeSessionCard === 'function') removeSessionCard(sessionId);

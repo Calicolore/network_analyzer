@@ -20,6 +20,12 @@ window.analyticsUI = {
     CHART_THROTTLE_MS: 500,
     TABLE_THROTTLE_MS: 300,
 
+    /**
+     * Formatta un numero di byte in unità leggibile (B/KB/MB/GB/TB).
+     *
+     * @param {number} bytes - Numero di byte da formattare
+     * @returns {string} Valore formattato, es. "12.34 MB"
+     */
     formatBytes(bytes) {
         if (!bytes || bytes === 0) return '0 B';
         const k = 1024;
@@ -28,6 +34,12 @@ window.analyticsUI = {
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     },
 
+    /**
+     * Traduce la chiave di un filtro/colonna nell'etichetta italiana mostrata in UI.
+     *
+     * @param {string} key - Chiave del filtro (es. "country", "service")
+     * @returns {string} Etichetta leggibile, o `key` stessa se non mappata
+     */
     getCategoryLabel(key) {
         const labels = { country: 'Nazione', service: 'Servizio', provider: 'Provider', status: 'Stato' };
         return labels[key] || key;
@@ -37,6 +49,8 @@ window.analyticsUI = {
      * Scrive i 5 KPI tile in cima alla vista Analytics. `filteredDataset` è il
      * risultato dei filtri attivi; il totale (per percentuale e byte complessivi)
      * viene sempre calcolato sull'intero DB (`state.globalChartSessions`).
+     *
+     * @param {object[]} filteredDataset - Dataset dopo i filtri attivi
      */
     updateGlobalKpiUI(filteredDataset) {
         const state = window.analyticsState;
@@ -69,6 +83,10 @@ window.analyticsUI = {
         if (kpiCountries) kpiCountries.innerText = uniqueCountries;
     },
 
+    /**
+     * Aggiorna il testo "Mostrando X-Y di Z" e lo stato abilitato/disabilitato dei
+     * pulsanti Prec/Succ, in base a `analyticsState` corrente.
+     */
     updatePaginationUI() {
         const state = window.analyticsState;
         const startElem = document.getElementById('pag-start');
@@ -90,6 +108,11 @@ window.analyticsUI = {
         if (btnNext) btnNext.disabled = (state.currentPage >= state.totalPages);
     },
 
+    /**
+     * Collega il click sulle intestazioni di colonna ordinabili al cambio di
+     * ordinamento (stessa colonna -> inverte verso, colonna diversa -> imposta un
+     * verso di default sensato per quella colonna).
+     */
     initSortingHeaders() {
         const headers = document.querySelectorAll('#view-analytics th.sortable');
         headers.forEach(header => {
@@ -111,6 +134,10 @@ window.analyticsUI = {
         });
     },
 
+    /**
+     * Aggiorna le frecce ▲/▼/⇅ sulle intestazioni di colonna in base alla colonna e
+     * al verso di ordinamento correnti.
+     */
     updateSortIcons() {
         const state = window.analyticsState;
         document.querySelectorAll('#view-analytics th.sortable').forEach(header => {
@@ -128,6 +155,13 @@ window.analyticsUI = {
         });
     },
 
+    /**
+     * Ripopola da zero i 4 menu a tendina dei filtri (country/service/provider/status)
+     * con i valori DISTINCT presenti nel dataset, preservando la selezione corrente.
+     *
+     * @param {object[]} dataset - Dataset (tipicamente l'intero DB) da cui estrarre i
+     *   valori distinti
+     */
     resetAndPopulateDropdowns(dataset) {
         const state = window.analyticsState;
         const fields = ['country', 'service', 'provider', 'status'];
@@ -177,6 +211,8 @@ window.analyticsUI = {
     /**
      * Protezione Dropdown: Aggiunge opzioni dinamiche solo se l'utente non sta
      * attualmente interagendo con il select (evita chiusure/reset del menu).
+     *
+     * @param {object} packetData - Pacchetto live appena ricevuto
      */
     updateDropdownsWithNewItem(packetData) {
         const state = window.analyticsState;
@@ -207,6 +243,10 @@ window.analyticsUI = {
         });
     },
 
+    /**
+     * Ridisegna i "chip" dei filtri attivi (uno per ogni filtro con valore non vuoto),
+     * ciascuno con un pulsante per rimuovere quel singolo filtro.
+     */
     renderFilterChips() {
         const activeFiltersBox = document.getElementById('active-filters-box');
         const noFiltersText = document.getElementById('no-filters-text');
@@ -241,6 +281,12 @@ window.analyticsUI = {
         }
     },
 
+    /**
+     * Disabilita nel selettore "Raggruppa per" (`#paramSelect`) il parametro su cui è
+     * già attivo un filtro (raggruppare per un valore già fissato da un filtro non
+     * avrebbe senso: darebbe sempre una sola fetta), spostando la selezione su
+     * un'opzione ancora disponibile se necessario.
+     */
     updateChartDropdownOptions() {
         const paramSelect = document.getElementById('paramSelect');
         if (!paramSelect) return;
@@ -278,6 +324,10 @@ window.analyticsUI = {
     /**
      * Filtra l'INTERO DATABASE per il grafico e suddivide in pagine per la tabella.
      * Applica la Protezione Paginazione Real-Time.
+     *
+     * @param {boolean} [forceChartUpdate] - true per forzare grafico/tabella a
+     *   ridisegnarsi subito, ignorando throttling e protezione-pagina (usato per
+     *   cambi utente espliciti come filtri/paginazione, non per il flusso live)
      */
     applyFiltersAndRender(forceChartUpdate = false) {
         const state = window.analyticsState;
@@ -356,6 +406,11 @@ window.analyticsUI = {
         }
     },
 
+    /**
+     * Ridisegna le righe della tabella risultati per la pagina corrente.
+     *
+     * @param {object[]} data - Righe sessione da mostrare (già paginate)
+     */
     renderTable(data) {
         const tableBody = document.getElementById('connections-table-body');
         if (!tableBody) return;

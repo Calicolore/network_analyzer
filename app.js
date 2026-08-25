@@ -34,7 +34,13 @@ const io = startServer(webPort);
 
 console.log(`[SISTEMA] IP Monitorato: ${myIp}`);
 
-// Helper per formattare data e ora complete (GG/MM/AAAA, HH:mm:ss)
+/**
+ * Formatta una data/ora completa in italiano (GG/MM/AAAA, HH:mm:ss).
+ *
+ * @param {string|number|Date} [rawTime] - Timestamp/data grezza da formattare
+ * @returns {string} Data/ora formattata; se `rawTime` è assente o non valido, usa
+ *   l'istante corrente come fallback
+ */
 function getFullFormattedDateTime(rawTime) {
     const dateObj = rawTime ? new Date(rawTime) : new Date();
     const validDate = isNaN(dateObj.getTime()) ? new Date() : dateObj;
@@ -74,6 +80,18 @@ setInterval(() => {
 // ================================================================================
 // PASSO 4: INIZIALIZZAZIONE DELLO SNIFFER DI RETE ED ELABORAZIONE PACCHETTI
 // ================================================================================
+/**
+ * ================================================================================
+ * PIPELINE DI ELABORAZIONE DI UN SINGOLO PACCHETTO CATTURATO
+ * ================================================================================
+ * Invocata da network/sniffer.js per OGNI pacchetto catturato (TCP, UDP o DNS).
+ * Instrada i pacchetti DNS a parte per popolare le mappe di associazione
+ * IP->dominio, poi per TCP/UDP calcola sessione/direzione, arricchisce il pacchetto
+ * con nome risorsa/provider/servizio/geolocalizzazione (vedi FASE 1-11 sotto), lo
+ * inoltra al buffer WebSocket e lo persiste su SQLite.
+ *
+ * @param {object} packet - Pacchetto decodificato emesso da network/sniffer.js
+ */
 initSniffer(myIp, async (packet) => {
 
     // ================================================================================
@@ -85,20 +103,21 @@ initSniffer(myIp, async (packet) => {
     }
 
     // ================================================================================
-    // FASE 2: FILTRO TRAFFICO GENERATO DALLA DASHBOARD
-    // ================================================================================
-    if (packet.srcPort === webPort || packet.dstPort === webPort) return;
-
-    // ================================================================================
-    // FASE 3: CALCOLO DIREZIONE E IDENTIFICATIVO SESSIONE
+    // FASE 2: CALCOLO DIREZIONE, IDENTIFICATIVO SESSIONE E FILTRO TRAFFICO DASHBOARD
     // ================================================================================
     const isOutbound = packet.src === myIp;
+    const localPort = isOutbound ? packet.srcPort : packet.dstPort;
     const remoteIp = isOutbound ? packet.dst : packet.src;
     const remotePort = isOutbound ? packet.dstPort : packet.srcPort;
     const sessionId = `${remoteIp}:${remotePort}`;
 
+    // Esclude solo il traffico verso/da questo stesso server Express (dashboard+websocket):
+    // il controllo va fatto sulla porta LOCALE, non su remotePort — un servizio remoto che
+    // usasse per coincidenza la stessa porta del webserver locale non va escluso per errore.
+    if (localPort === webPort) return;
+
     // ================================================================================
-    // FASE 4: REGISTRAZIONE SESSIONE, COLORE ED ESECUZIONE TRACEROUTE
+    // FASE 3: REGISTRAZIONE SESSIONE, COLORE ED ESECUZIONE TRACEROUTE
     // ================================================================================
     if (!sessionColors.has(sessionId)) {
         sessionColors.set(sessionId, generateRandomColor());
@@ -122,14 +141,14 @@ initSniffer(myIp, async (packet) => {
     const sessionColor = sessionColors.get(sessionId);
 
     // ================================================================================
-    // FASE 5: ACCUMULO E CALCOLO VOLUME DI TRAFFICO (KB)
+    // FASE 4: ACCUMULO E CALCOLO VOLUME DI TRAFFICO (KB)
     // ================================================================================
-    let totalBytes = (sessionTotalBytes.get(sessionId) || 0) + (packet.size || 0);
+    const totalBytes = (sessionTotalBytes.get(sessionId) || 0) + (packet.size || 0);
     sessionTotalBytes.set(sessionId, totalBytes);
     const totalKB = (totalBytes / 1024).toFixed(2);
 
     // ================================================================================
-    // FASE 6: RISOLUZIONE DETTAGLI RISORSA (DNS, SNI TLS, PROVIDER)
+    // FASE 5: RISOLUZIONE DETTAGLI RISORSA (DNS, SNI TLS, PROVIDER)
     // ================================================================================
     const { hostName, resourceName, technicalSubtitle, provider: detectedProvider, flow } = await resolveResourceDetails(remoteIp, packet.payload);
 
@@ -141,25 +160,27 @@ initSniffer(myIp, async (packet) => {
     sessionResourceNames.set(sessionId, resourceName);
     
     // ================================================================================
-    // FASE 7: IDENTIFICAZIONE SERVIZIO / PROTOCOLLO APPLICATIVO
+    // FASE 6: IDENTIFICAZIONE SERVIZIO / PROTOCOLLO APPLICATIVO
     // ================================================================================
     const serviceName = getServiceName(remotePort, packet.service);
 
     // ================================================================================
-    // FASE 8: GEOLOCALIZZAZIONE IP REMOTO
+    // FASE 7: GEOLOCALIZZAZIONE IP REMOTO
     // ================================================================================
     const geo = geoip.lookup(remoteIp);
     const lat = geo ? geo.ll[0] : null;
     const lon = geo ? geo.ll[1] : null;
 
     // ================================================================================
-    // FASE 9: TRADUZIONE FLAG TCP E DIMENSIONE PACCHETTO
+    // FASE 8: TRADUZIONE FLAG TCP E DIMENSIONE PACCHETTO
     // ================================================================================
     const readableFlags = translateFlags(packet.flags);
-    const packetSizeBytes = packet.size || packet.length || packet.len || (packet.pcap_header ? packet.pcap_header.len : 0) || 0;
+    // packet.size è sempre popolato per pacchetti TCP/UDP da network/sniffer.js
+    // (i pacchetti DNS, unico caso privo di `size`, sono già gestiti ed usciti in FASE 1)
+    const packetSizeBytes = packet.size || 0;
 
     // ================================================================================
-    // FASE 10: COSTRUZIONE DTO METADATI PACCHETTO
+    // FASE 9: COSTRUZIONE DTO METADATI PACCHETTO
     // ================================================================================
     const formattedTime = getFullFormattedDateTime(packet.timestamp);
 
@@ -186,7 +207,7 @@ initSniffer(myIp, async (packet) => {
     };
 
     // ================================================================================
-    // FASE 11: INSERIMENTO NEL BUFFER WEBSOCKET E SALVATAGGIO DATABASE
+    // FASE 10: INSERIMENTO NEL BUFFER WEBSOCKET E SALVATAGGIO DATABASE
     // ================================================================================
     packetBuffer.push(packetData);
 
@@ -209,7 +230,7 @@ initSniffer(myIp, async (packet) => {
     });
 
     // ================================================================================
-    // FASE 12: GESTIONE CHIUSURA SESSIONE (FLAG FIN O RST)
+    // FASE 11: GESTIONE CHIUSURA SESSIONE (FLAG FIN O RST)
     // ================================================================================
     if (readableFlags.includes('FIN') || readableFlags.includes('RST')) {
         io.emit('session_closed', {
@@ -268,6 +289,11 @@ setInterval(() => {
 // ================================================================================
 // PASSO 6: GESTIONE CHIUSURA PULITA DEL PROCESSO
 // ================================================================================
+/**
+ * Gestisce l'arresto pulito del processo (Ctrl+C o kill): forza il flush di eventuali
+ * dati ancora bufferizzati su SQLite prima di terminare, così nessun pacchetto/sessione
+ * recente viene perso alla chiusura.
+ */
 function handleShutdown() {
     console.log('\n[SISTEMA] Chiusura applicazione in corso...');
     closeAllActiveSessions();

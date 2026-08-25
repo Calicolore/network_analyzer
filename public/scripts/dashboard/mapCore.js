@@ -107,6 +107,8 @@ const HIGHLIGHT_COLOR = '#facc15';
 /**
  * Aggiorna le coordinate "sorgente" (punto di partenza logico dei pacchetti in uscita).
  * Non centra mai la mappa: resta sempre centrata globalmente sul mondo come richiesto.
+ *
+ * @param {[number, number]} coords - Coordinate [lat, lon] della nuova posizione sorgente
  */
 function setHomeLocation(coords) {
     if (coords && Array.isArray(coords) && coords.length === 2) {

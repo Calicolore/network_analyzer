@@ -59,6 +59,12 @@ document.addEventListener('DOMContentLoaded', () => {
     let renderTimer = null;
     const RENDER_DEBOUNCE_MS = 300;
 
+    /**
+     * Rimanda il ridisegno di grafico/tabella di `RENDER_DEBOUNCE_MS`, e lo salta del
+     * tutto se la vista Analytics non è quella attualmente visibile — evita di
+     * ridisegnare decine di volte al secondo durante un flusso intenso di pacchetti
+     * live quando l'utente sta guardando la Mappa.
+     */
     function scheduleRender() {
         if (renderTimer) return;
         renderTimer = setTimeout(() => {

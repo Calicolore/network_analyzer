@@ -1,6 +1,13 @@
 /**
  * ====================================================================================
- * SERVIZIO RISOLUZIONE PROCEDURALE DEGLI HOSTNAME (dnsService.js)
+ * SERVIZIO RISOLUZIONE PROCEDURALE DEGLI HOSTNAME (services/dnsService.js)
+ * ====================================================================================
+ * Identifica il nome della risorsa/sito dietro un IP remoto, combinando più fonti in
+ * ordine di priorità (vedi resolveResourceDetails): DNS passivo sniffato, SNI del
+ * ClientHello TLS o header Host: HTTP, reverse DNS, cache DNS di sistema Windows.
+ * Fornisce anche l'euristica hardcoded di riconoscimento provider (detectProvider,
+ * fallback sincrono di services/providerService.js) e il raggruppamento per famiglia
+ * di dominio (getDomainFamily, tabella in services/domainFamilies.js).
  * ====================================================================================
  */
 
@@ -19,8 +26,11 @@ const resolvedResourceCache = new Map(); // Cache finale dei dettagli per IP
 /**
  * Normalizza un dominio al brand/sito principale a cui appartiene, se noto
  * (es. twimg.com -> x.com), tramite la tabella curata in domainFamilies.js.
- * Se il dominio è una CDN pura senza brand associato (target: null), o non
- * compare in tabella, viene restituito invariato.
+ *
+ * @param {string} domain - Dominio da normalizzare
+ * @returns {string|null} Il dominio "brand" principale, il dominio invariato se è
+ *   una CDN pura senza brand associato o non compare in tabella, o null se `domain`
+ *   è vuoto
  */
 function normalizeDomain(domain) {
     if (!domain) return null;
@@ -34,6 +44,10 @@ function normalizeDomain(domain) {
 /**
  * Restituisce l'identificativo di "famiglia" (flow) a cui appartiene un dominio,
  * usato per raggruppare in UI le connessioni correlate allo stesso sito/servizio.
+ *
+ * @param {string} domain - Dominio di cui determinare la famiglia
+ * @returns {string|null} Identificativo di famiglia (es. "google", "x"), o null se
+ *   il dominio non compare in tabella
  */
 function getDomainFamily(domain) {
     if (!domain) return null;
@@ -41,6 +55,14 @@ function getDomainFamily(domain) {
     return entry ? entry.family : null;
 }
 
+/**
+ * Scarta i nomi che non sono utilizzabili come risultato: vuoti, uguali all'IP
+ * stesso, o record PTR reverse-DNS grezzi (.in-addr.arpa/.ip6.arpa).
+ *
+ * @param {string} name - Nome/dominio da validare
+ * @param {string} ip - IP remoto associato, per il confronto "nome === ip"
+ * @returns {boolean} true se il nome è utilizzabile come risultato
+ */
 function isValidHostname(name, ip) {
     if (!name) return false;
     const n = name.toLowerCase().trim();
@@ -51,6 +73,12 @@ function isValidHostname(name, ip) {
     return true;
 }
 
+/**
+ * Interroga periodicamente la cache DNS del resolver di Windows (Get-DnsClientCache)
+ * per recuperare passivamente associazioni IP->dominio già risolte dal sistema operativo
+ * (utile per traffico la cui query DNS non è stata vista dallo sniffer, es. DNS gestito
+ * da altri processi). Funzionalità Windows-only: fallisce silenziosamente su altri OS.
+ */
 async function syncSystemDnsCache() {
     try {
         const command = `powershell -NoProfile -Command "Get-DnsClientCache | Select-Object Entry, Data | ConvertTo-Json"`;
@@ -76,6 +104,19 @@ async function syncSystemDnsCache() {
 setInterval(syncSystemDnsCache, 4000);
 syncSystemDnsCache();
 
+/**
+ * ====================================================================================
+ * ESTRAZIONE SNI DA CLIENTHELLO TLS (parsing manuale byte-a-byte)
+ * ====================================================================================
+ * Attraversa la struttura del record TLS (handshake type, random, session id, cipher
+ * suites, compression methods, poi l'estensione server_name tra le extension) per
+ * estrarne l'hostname richiesto. Nessuna libreria TLS coinvolta: è un parser minimale
+ * scritto a mano, sufficiente perché il ClientHello non è cifrato.
+ *
+ * @param {Buffer} buffer - Payload TCP grezzo catturato, atteso un ClientHello TLS
+ * @returns {string|null} Hostname SNI estratto, o null (senza eccezioni) per qualunque
+ *   payload che non sia un ClientHello riconoscibile
+ */
 function extractSNIFromTLS(buffer) {
     try {
         if (!buffer || !Buffer.isBuffer(buffer) || buffer.length < 43) return null;
@@ -127,6 +168,10 @@ function extractSNIFromTLS(buffer) {
 /**
  * Estrae il dominio dall'header "Host:" di una richiesta HTTP in chiaro (porta 80).
  * Fallback usato quando il payload catturato non è un ClientHello TLS.
+ *
+ * @param {Buffer} buffer - Payload TCP grezzo catturato, atteso l'inizio di una richiesta HTTP
+ * @returns {string|null} Valore dell'header Host, o null se non è una richiesta HTTP
+ *   riconoscibile o non ha un header Host
  */
 function extractHostFromHTTP(buffer) {
     try {
@@ -142,23 +187,31 @@ function extractHostFromHTTP(buffer) {
     }
 }
 
+/**
+ * ====================================================================================
+ * PARSING DI UN MESSAGGIO DNS GREZZO (formato wire RFC 1035)
+ * ====================================================================================
+ * `buffer` è già il solo messaggio DNS (nessun header Ethernet/IP/UDP davanti): lo
+ * sniffer (network/sniffer.js) passa qui esattamente i byte a partire dal payload UDP,
+ * quindi il messaggio DNS inizia sempre a offset 0 — il Transaction ID nei primi 2 byte.
+ * Legge la sezione Question (il dominio richiesto) e, se presenti, i record di
+ * risposta di tipo A (indirizzi IPv4 risolti), seguendo puntatori di compressione
+ * DNS (0xC0) dove necessario.
+ *
+ * @param {Buffer} buffer - Messaggio DNS grezzo (payload UDP della porta 53)
+ * @returns {{domain: string, ips: string[]}|null} Dominio richiesto e IP risolti, o
+ *   null se il messaggio non è un DNS valido o non contiene una domanda
+ */
 function parseDNSResponse(buffer) {
     try {
         if (!buffer || !Buffer.isBuffer(buffer) || buffer.length < 12) return null;
 
-        let dnsOffset = 0;
-        if (buffer.length > 42 && (buffer[12] === 0x08 && buffer[13] === 0x00)) {
-            dnsOffset = 14 + (buffer[14] & 0x0F) * 4 + 8;
-        }
-
-        if (dnsOffset + 12 > buffer.length) dnsOffset = 0;
-
-        const qdcount = buffer.readUInt16BE(dnsOffset + 4);
-        const ancount = buffer.readUInt16BE(dnsOffset + 6);
+        const qdcount = buffer.readUInt16BE(4);
+        const ancount = buffer.readUInt16BE(6);
 
         if (qdcount === 0) return null;
 
-        let offset = dnsOffset + 12;
+        let offset = 12;
         let parts = [];
         while (offset < buffer.length) {
             let len = buffer[offset];
@@ -212,6 +265,16 @@ function parseDNSResponse(buffer) {
     }
 }
 
+/**
+ * Reverse DNS (PTR) di un IP, con cache permanente per evitare lookup ripetuti verso
+ * lo stesso indirizzo. In caso di fallimento (nessun PTR, timeout, IP privato senza
+ * risposta) la cache memorizza l'IP stesso come risultato, così i tentativi falliti
+ * non vengono ripetuti ad ogni pacchetto.
+ *
+ * @param {string} ip - IP remoto di cui risolvere l'hostname
+ * @returns {Promise<string>} Hostname risolto (normalizzato), o l'IP stesso se il
+ *   PTR non esiste/fallisce
+ */
 async function getHostName(ip) {
     if (hostCache.has(ip)) return hostCache.get(ip);
     
@@ -229,6 +292,14 @@ async function getHostName(ip) {
     return ip;
 }
 
+/**
+ * Punto di ingresso chiamato da app.js per ogni pacchetto UDP/53 catturato: se la
+ * risposta DNS contiene record A validi, associa ciascun IP risolto al dominio
+ * richiesto (identificazione passiva "gratuita", non richiede alcuna richiesta
+ * aggiuntiva: sfrutta le query DNS che il sistema fa comunque per conto proprio).
+ *
+ * @param {Buffer} packetPayload - Messaggio DNS grezzo (payload UDP della porta 53)
+ */
 function recordDnsQuery(packetPayload) {
     const result = parseDNSResponse(packetPayload);
     if (result && result.domain && result.ips && result.ips.length > 0) {
@@ -238,6 +309,13 @@ function recordDnsQuery(packetPayload) {
     }
 }
 
+/**
+ * Registra in ipToDomainMap l'associazione IP->dominio, solo se il dominio è
+ * effettivamente utilizzabile (vedi isValidHostname).
+ *
+ * @param {string} ip - IP a cui associare il dominio
+ * @param {string} domain - Dominio risolto per quell'IP
+ */
 function associateIpWithDomain(ip, domain) {
     if (!ip || !domain) return;
     const normalized = normalizeDomain(domain);
@@ -247,13 +325,28 @@ function associateIpWithDomain(ip, domain) {
     }
 }
 
+/**
+ * ====================================================================================
+ * EURISTICA HARDCODED DI RICONOSCIMENTO PROVIDER/HOSTING
+ * ====================================================================================
+ * Usata come fallback sincrono immediato finché non arriva (in modo asincrono) il
+ * risultato più accurato di services/providerService.js (ip-api.com) per lo stesso IP.
+ * I pattern sono deliberatamente specifici (es. "amazonaws" non il generico "aws"):
+ * sottostringhe troppo corte/generiche produrrebbero falsi positivi su hostname
+ * qualunque che le contengano per puro caso.
+ *
+ * @param {string} ip - IP remoto (usato solo per l'euristica sul prefisso Azure "20.")
+ * @param {string} hostName - Hostname/dominio risolto per l'IP
+ * @param {string} subtitle - Sottotitolo tecnico (es. hostname reverse-DNS grezzo)
+ * @returns {string|null} Nome del provider riconosciuto, o null se nessun pattern combacia
+ */
 function detectProvider(ip, hostName, subtitle) {
-    const combined = `${ip} ${hostName || ''} ${subtitle || ''}`.toLowerCase();
-    
-    if (combined.includes('amazonaws') || combined.includes('cloudfront') || combined.includes('aws')) {
+    const combined = `${hostName || ''} ${subtitle || ''}`.toLowerCase();
+
+    if (combined.includes('amazonaws') || combined.includes('cloudfront')) {
         return 'Amazon AWS';
     }
-    if (combined.includes('cloudflare') || combined.includes('cf-')) {
+    if (combined.includes('cloudflare')) {
         return 'Cloudflare';
     }
     if (combined.includes('google') || combined.includes('1e100.net') || combined.includes('googleusercontent') || combined.includes('gcp')) {
@@ -266,7 +359,18 @@ function detectProvider(ip, hostName, subtitle) {
 }
 
 /**
- * PIPELINE PROCEDURALE CON CACHE RISULTATI
+ * ====================================================================================
+ * PIPELINE DI IDENTIFICAZIONE RISORSA (con cache dei risultati per IP)
+ * ====================================================================================
+ * Prova in sequenza le fonti disponibili (dominio già noto, SNI/HTTP, reverse DNS,
+ * cache di sistema) e si ferma alla prima che produce un nome valido — se una fonte
+ * fallisce si passa alla successiva invece di arrendersi subito su "Risorsa Web".
+ *
+ * @param {string} remoteIp - IP remoto della connessione da identificare
+ * @param {Buffer|null} [packetPayload] - Payload applicativo catturato (ClientHello TLS
+ *   o richiesta HTTP), se disponibile per questo pacchetto
+ * @returns {Promise<{hostName:string, resourceName:string, technicalSubtitle:string,
+ *   provider:?string, flow:?string}>}
  */
 async function resolveResourceDetails(remoteIp, packetPayload = null) {
     // Controllo immediato in cache per evitare rilavorazioni
@@ -301,7 +405,9 @@ async function resolveResourceDetails(remoteIp, packetPayload = null) {
         resourceName: "Risorsa Web",
         technicalSubtitle: rawHostName !== remoteIp ? rawHostName : ""
     };
+    let resolved = false;
 
+    // 1. Dominio già associato a questo IP tramite DNS/SNI osservato in precedenza
     if (isValidHostname(ipToDomainMap.get(remoteIp), remoteIp)) {
         const directDomain = ipToDomainMap.get(remoteIp);
         resolvedDetails = {
@@ -309,8 +415,15 @@ async function resolveResourceDetails(remoteIp, packetPayload = null) {
             resourceName: directDomain,
             technicalSubtitle: sanitizeSubtitle(directDomain, rawHostName)
         };
+        resolved = true;
     }
-    else if (packetPayload) {
+
+    // 2. SNI del ClientHello TLS, o header Host: di una richiesta HTTP in chiaro.
+    // Se il payload non produce un dominio valido (frammentazione TLS, pacchetto senza
+    // SNI, ecc.) NON ci si ferma qui: si prosegue con i passi successivi invece di
+    // arrendersi subito su "Risorsa Web", perché reverse DNS o cache di sistema
+    // potrebbero comunque avere un nome buono.
+    if (!resolved && packetPayload) {
         const extractedDomain = extractSNIFromTLS(packetPayload) || extractHostFromHTTP(packetPayload);
         if (extractedDomain) {
             const cleanedDomain = normalizeDomain(extractedDomain);
@@ -321,17 +434,23 @@ async function resolveResourceDetails(remoteIp, packetPayload = null) {
                     resourceName: cleanedDomain,
                     technicalSubtitle: sanitizeSubtitle(cleanedDomain, rawHostName)
                 };
+                resolved = true;
             }
         }
     }
-    else if (isValidHostname(rawHostName, remoteIp)) {
+
+    // 3. Reverse DNS (PTR) dell'IP remoto
+    if (!resolved && isValidHostname(rawHostName, remoteIp)) {
         resolvedDetails = {
             hostName: rawHostName,
             resourceName: rawHostName,
             technicalSubtitle: getRootDomain(rawHostName)
         };
+        resolved = true;
     }
-    else {
+
+    // 4. Cache DNS di sistema Windows, o euristica hardcoded per i blocchi IP noti di Google/YouTube
+    if (!resolved) {
         const sysDomain = systemDnsCache.get(remoteIp);
         if (isValidHostname(sysDomain, remoteIp)) {
             ipToDomainMap.set(remoteIp, sysDomain);
@@ -341,8 +460,8 @@ async function resolveResourceDetails(remoteIp, packetPayload = null) {
                 technicalSubtitle: getRootDomain(sysDomain)
             };
         } else if (
-            remoteIp.startsWith('142.251.') || 
-            remoteIp.startsWith('172.217.') || 
+            remoteIp.startsWith('142.251.') ||
+            remoteIp.startsWith('172.217.') ||
             remoteIp.startsWith('142.250.') ||
             (rawHostName && rawHostName.includes('1e100.net'))
         ) {

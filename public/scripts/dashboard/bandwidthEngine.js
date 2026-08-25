@@ -14,6 +14,10 @@
 let bandwidthChart = null;
 let currentChartMode = 'line'; // 'line' | 'bar'
 
+/**
+ * Crea l'istanza Chart.js (inizialmente in modalità "Temporale") e avvia accordion,
+ * selettore di modalità e listener socket. Chiamata una sola volta, su DOMContentLoaded.
+ */
 function initBandwidthChart() {
     const ctx = document.getElementById('bandwidthChart')?.getContext('2d');
     if (!ctx) return;
@@ -54,7 +58,9 @@ function initBandwidthChart() {
 }
 
 /**
- * Opzioni Grafico Temporale
+ * Opzioni Chart.js per il grafico "Temporale" (line).
+ *
+ * @returns {object} Oggetto opzioni Chart.js
  */
 function getLineChartOptions() {
     return {
@@ -90,7 +96,9 @@ function getLineChartOptions() {
 }
 
 /**
- * Opzioni Grafico a Barre
+ * Opzioni Chart.js per il grafico "Per Connessione" (bar).
+ *
+ * @returns {object} Oggetto opzioni Chart.js
  */
 function getBarChartOptions() {
     return {
@@ -138,6 +146,9 @@ function getBarChartOptions() {
     };
 }
 
+/**
+ * Ridisegna il grafico in modalità "Temporale" (line) con i dati correnti di bandwidthFeed.js.
+ */
 function renderLineView() {
     bandwidthChart.config.type = 'line';
     bandwidthChart.options = getLineChartOptions();
@@ -169,6 +180,10 @@ function renderLineView() {
     bandwidthChart.update('none');
 }
 
+/**
+ * Ridisegna il grafico in modalità "Per Connessione" (bar), usando la mappa di traffico
+ * attiva (live o DB importato, vedi bandwidthFeed.js getActiveTrafficMap/getActiveColorMap).
+ */
 function renderBarView() {
     bandwidthChart.config.type = 'bar';
     bandwidthChart.options = getBarChartOptions();
@@ -198,6 +213,10 @@ function renderBarView() {
     bandwidthChart.update('none');
 }
 
+/**
+ * Collega i due pulsanti Temporale/Per Connessione al cambio di `currentChartMode`
+ * e al conseguente ridisegno del grafico.
+ */
 function initModeSelector() {
     const btnLine = document.getElementById('btn-chart-line');
     const btnBar = document.getElementById('btn-chart-bar');
@@ -225,6 +244,11 @@ function initModeSelector() {
     });
 }
 
+/**
+ * Collega il pulsante di apertura/chiusura del riquadro grafico banda, ridimensionando
+ * il canvas Chart.js alla riapertura (Chart.js non ridisegna da solo un canvas che era
+ * `display:none`).
+ */
 function initBandwidthAccordion() {
     const toggleBtn = document.getElementById('toggle-bandwidth-btn');
     const container = document.getElementById('bandwidth-container');

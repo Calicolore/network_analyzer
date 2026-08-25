@@ -102,12 +102,27 @@ const DOMAIN_FAMILIES = [
 ];
 
 /**
- * Cerca la prima voce della tabella il cui pattern è contenuto nel dominio dato.
+ * ====================================================================================
+ * RICERCA DELLA FAMIGLIA DI DOMINIO (match per suffisso, non per sottostringa)
+ * ====================================================================================
+ * Cerca la voce della tabella il cui pattern corrisponde al dominio dato, o a un suo
+ * dominio "genitore" (es. "abs.twimg.com" corrisponde al pattern "twimg.com").
+ *
+ * Il confronto è sul SUFFISSO del dominio, delimitato da un punto (dominio === pattern
+ * oppure dominio termina con ".pattern") — non un semplice `includes()` su sottostringa:
+ * con pattern corti come "x.com" o "t.co" una sottostringa nuda produrrebbe falsi
+ * positivi (es. "netflix.com" termina in "x.com", "microsoft.com" contiene "t.co"
+ * subito prima del ".com" finale), classificando erroneamente domini non correlati
+ * nella famiglia sbagliata.
+ *
+ * @param {string} domain - Dominio da cercare in DOMAIN_FAMILIES
+ * @returns {{pattern: string, family: string, target: string|null}|null} La voce
+ *   trovata, o null se nessun pattern corrisponde
  */
 function findFamilyEntry(domain) {
     if (!domain) return null;
     const d = domain.toLowerCase();
-    return DOMAIN_FAMILIES.find(entry => d.includes(entry.pattern)) || null;
+    return DOMAIN_FAMILIES.find(entry => d === entry.pattern || d.endsWith('.' + entry.pattern)) || null;
 }
 
 module.exports = { DOMAIN_FAMILIES, findFamilyEntry };

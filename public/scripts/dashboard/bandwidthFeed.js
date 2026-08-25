@@ -41,25 +41,37 @@ const importedConnectionTrafficMap = new Map();
 const importedConnectionColorMap = new Map();
 
 /**
- * Vero quando è attivo un DB importato (traffico live in pausa generale)
+ * Vero quando è attivo un DB importato (traffico live in pausa generale).
+ *
+ * @returns {boolean} true se è attiva la modalità DB importato
  */
 function isImportedModeActive() {
     return !!(window.analyticsExport && window.analyticsExport.isImportedMode);
 }
 
 /**
- * Restituisce la mappa di traffico attiva in base alla modalità corrente
+ * Restituisce la mappa di traffico (byte totali per connessione) attiva in base alla
+ * modalità corrente.
+ *
+ * @returns {Map<string, number>} Mappa nome-connessione -> byte totali
  */
 function getActiveTrafficMap() {
     return isImportedModeActive() ? importedConnectionTrafficMap : liveConnectionTrafficMap;
 }
 
+/**
+ * Restituisce la mappa colori (per connessione) attiva in base alla modalità corrente.
+ *
+ * @returns {Map<string, string>} Mappa nome-connessione -> colore
+ */
 function getActiveColorMap() {
     return isImportedModeActive() ? importedConnectionColorMap : liveConnectionColorMap;
 }
 
 /**
  * Genera colori ad alta luminosità per lo sfondo scuro della dashboard.
+ *
+ * @returns {string} Colore in formato esadecimale, es. "#A2C3F1"
  */
 function generateRandomColor() {
     const letters = '89ABCDEF';
@@ -71,7 +83,10 @@ function generateRandomColor() {
 }
 
 /**
- * Estrae il nome reale dal pacchetto live usando le proprietà trasmesse dal backend
+ * Estrae il nome reale dal pacchetto live usando le proprietà trasmesse dal backend.
+ *
+ * @param {object} packet - Pacchetto live ricevuto dal server
+ * @returns {string} Nome della connessione da usare come etichetta nel grafico a barre
  */
 function extractConnectionName(packet) {
     if (!packet) return 'Connessione Sconosciuta';
@@ -111,7 +126,10 @@ function extractConnectionName(packet) {
 }
 
 /**
- * Estrae il nome reale da una sessione del DB importato (schema snake_case)
+ * Estrae il nome reale da una sessione del DB importato (schema snake_case).
+ *
+ * @param {object} session - Riga sessione dal DB importato
+ * @returns {string} Nome della connessione da usare come etichetta nel grafico a barre
  */
 function extractConnectionNameFromSession(session) {
     if (!session) return 'Connessione Sconosciuta';
@@ -128,7 +146,11 @@ function extractConnectionNameFromSession(session) {
 }
 
 /**
- * Ascolto Socket.io
+ * Avvia l'ascolto Socket.IO per il grafico banda: accumula i byte del pacchetto per il
+ * grafico "Temporale" e per la connessione nel grafico "Per Connessione", poi ogni
+ * secondo invia l'accumulo del grafico temporale a `updateBandwidthData`. Riusa
+ * `window.socket` se già presente (impostata da dashboard.js) invece di aprire una
+ * seconda connessione Socket.IO.
  */
 function initSocketListener() {
     const socket = window.socket || (typeof io !== 'undefined' ? io() : null);
@@ -182,6 +204,14 @@ function initSocketListener() {
     }, 1000);
 }
 
+/**
+ * Aggiunge un campione al buffer storico del grafico "Temporale", aggiorna il testo
+ * delle statistiche Download/Upload, e ridisegna il grafico nella modalità corrente.
+ *
+ * @param {number} downloadKB - KB scaricati nell'ultimo secondo
+ * @param {number} uploadKB - KB caricati nell'ultimo secondo
+ * @param {boolean} [isPaused] - true se in modalità DB importato (traffico live in pausa)
+ */
 function updateBandwidthData(downloadKB, uploadKB, isPaused = false) {
     const nowLabel = new Date().toLocaleTimeString();
     lineLabels.push(nowLabel);
@@ -212,7 +242,9 @@ function updateBandwidthData(downloadKB, uploadKB, isPaused = false) {
 
 /**
  * Carica nel grafico "Per Connessione" i totali del DB importato.
- * Chiamata da analyticsImport.js all'importazione di un nuovo DB.
+ * Chiamata da dbview/analyticsImport.js all'importazione di un nuovo DB.
+ *
+ * @param {object[]} sessions - Sessioni del DB importato (schema snake_case)
  */
 function loadImportedBandwidthData(sessions) {
     importedConnectionTrafficMap.clear();
@@ -241,7 +273,7 @@ function loadImportedBandwidthData(sessions) {
 
 /**
  * Svuota i dati del DB importato dal grafico "Per Connessione".
- * Chiamata da analyticsImport.js al ritorno in modalità Real Time.
+ * Chiamata da dbview/analyticsImport.js al ritorno in modalità Real Time.
  */
 function clearImportedBandwidthData() {
     importedConnectionTrafficMap.clear();
