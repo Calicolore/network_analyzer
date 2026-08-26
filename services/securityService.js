@@ -6,7 +6,7 @@
  * decifrare alcun traffico: porta in chiaro (HTTP/80) e, per le connessioni TLS, la
  * versione del protocollo negoziata (letta dal ClientHello: legacy_version, o
  * l'estensione supported_versions se presente — l'unico modo per rilevare TLS 1.3, dato
- * che il legacy_version resta sempre fissato a 0x0303 per compatibilità all'indietro).
+ * che il legacy_version resta sempre fissato a 0x0303 per retrocompatibilità).
  *
  * NOTA: la stima si basa solo sul ClientHello (ciò che il CLIENT è disposto a offrire),
  * non sul ServerHello (ciò che viene realmente negoziato tra client e server): è
