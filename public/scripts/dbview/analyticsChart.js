@@ -121,9 +121,9 @@ function renderAnalyticsChart(data = []) {
 
     /**
      * "length - 1" esclude deliberatamente l'ultimo colore della tavolozza (#64748b) dal
-     * ciclo delle fette normali: è lo stesso grigio hardcoded usato qui sopra per "Altro",
-     * riservato solo a quella fetta così non viene mai assegnato per coincidenza a una
-     * categoria reale.
+     * ciclo delle fette normali: è lo stesso grigio hardcoded assegnato esplicitamente
+     * quando `label === 'Altro'`, riservato solo a quella fetta così non viene mai
+     * assegnato per coincidenza a una categoria reale.
      */
     const bgColors = labels.map((label, i) => {
         if (label === 'Altro') return '#64748b';

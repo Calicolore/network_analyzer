@@ -10,8 +10,9 @@
  *
  * Nota: `server/webServer.js` apre una SECONDA connessione allo stesso file SQLite
  * con un driver diverso (`sqlite3`, asincrono) per le query di sola lettura
- * dell'API REST. Le due connessioni convivono correttamente perché qui sotto è
- * attiva la modalità WAL (consente letture concorrenti mentre questo modulo scrive).
+ * dell'API REST. Le due connessioni convivono correttamente perché questo modulo
+ * abilita la modalità WAL - Write-Ahead Logging (consente letture concorrenti
+ * mentre questo modulo scrive).
  * ================================================================================
  */
 
@@ -113,7 +114,7 @@ db.exec(initProviderCacheQuery);
  * ================================================================================
  * RIPRISTINO STATO ALL'AVVIO
  * ================================================================================
- * Riutilizzato anche in closeAllActiveSessions() più sotto, alla chiusura pulita del processo.
+ * Riutilizzato anche in closeAllActiveSessions(), alla chiusura pulita del processo.
  */
 const closeActiveOrIdleStmt = db.prepare("UPDATE sessions SET status = 'closed' WHERE status IN ('active', 'idle')");
 const result = closeActiveOrIdleStmt.run();
