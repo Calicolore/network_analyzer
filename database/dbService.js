@@ -92,6 +92,8 @@ function safeAddColumn(table, columnDef) {
 safeAddColumn('sessions', 'lat REAL');
 safeAddColumn('sessions', 'lon REAL');
 safeAddColumn('sessions', 'flow TEXT');
+safeAddColumn('sessions', 'security_level TEXT');
+safeAddColumn('sessions', 'security_label TEXT');
 
 /**
  * Tabella cache provider/ASN: persiste i risultati di ip-api.com tra i riavvii,
@@ -146,11 +148,11 @@ const upsertStmt = db.prepare(`
     INSERT INTO sessions (
         session_id, remote_ip, remote_port, host_name, resource_name,
         technical_subtitle, provider, country, service, total_bytes,
-        lat, lon, flow, first_seen, last_seen, status
+        lat, lon, flow, security_level, security_label, first_seen, last_seen, status
     ) VALUES (
         @sessionId, @remoteIp, @remotePort, @hostName, @resourceName,
         @technicalSubtitle, @provider, @country, @service, @totalBytes,
-        @lat, @lon, @flow, @formattedTime, @formattedTime, 'active'
+        @lat, @lon, @flow, @securityLevel, @securityLabel, @formattedTime, @formattedTime, 'active'
     )
     ON CONFLICT(session_id) DO UPDATE SET
         total_bytes = @totalBytes,
@@ -166,6 +168,8 @@ const upsertStmt = db.prepare(`
         lat = COALESCE(excluded.lat, sessions.lat),
         lon = COALESCE(excluded.lon, sessions.lon),
         flow = COALESCE(excluded.flow, sessions.flow),
+        security_level = COALESCE(excluded.security_level, sessions.security_level),
+        security_label = COALESCE(excluded.security_label, sessions.security_label),
         status = 'active';
 `);
 

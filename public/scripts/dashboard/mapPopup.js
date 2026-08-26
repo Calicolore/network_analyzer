@@ -28,6 +28,18 @@ const SERVICE_DESCRIPTIONS = {
 };
 
 /**
+ * Colore per livello di sicurezza stimato (services/securityService.js), duplicato qui
+ * volutamente per mantenere il modulo indipendente (stessa logica di dashboard/
+ * uiCardHelpers.js e dbview/mapImportManager.js, ciascuno col proprio markup di badge).
+ */
+const SECURITY_LEVEL_COLORS = {
+    insecure: '#f87171',
+    weak: '#fbbf24',
+    adequate: '#60a5fa',
+    secure: '#4ade80'
+};
+
+/**
  * ================================================================================
  * GENERAZIONE HTML DEL POPUP DI UN SINGOLO HOP
  * ================================================================================
@@ -43,9 +55,12 @@ const SERVICE_DESCRIPTIONS = {
  * @param {number|string} remotePort - Porta remota della connessione (solo per l'ultimo hop)
  * @param {string} technicalSubtitle - Sottotitolo tecnico (es. hostname reverse-DNS)
  * @param {string|null} providerName - Provider/hosting riconosciuto per questo hop, se noto
+ * @param {string|null} [securityLevel] - Livello di sicurezza stimato per la sessione
+ *   ('insecure'|'weak'|'adequate'|'secure'), mostrato solo sull'ultimo hop (destinazione)
+ * @param {string|null} [securityLabel] - Etichetta leggibile del livello di sicurezza
  * @returns {string} Markup HTML del popup, pronto per Leaflet `bindPopup`/`setPopupContent`
  */
-function getHopPopupHTML(sessionId, currentIndex, totalHops, currentIp, currentCity, remotePort, technicalSubtitle, providerName) {
+function getHopPopupHTML(sessionId, currentIndex, totalHops, currentIp, currentCity, remotePort, technicalSubtitle, providerName, securityLevel, securityLabel) {
     const isFirst = currentIndex === 0;
     const isLast = currentIndex === totalHops - 1;
 
@@ -64,6 +79,11 @@ function getHopPopupHTML(sessionId, currentIndex, totalHops, currentIp, currentC
     // Riga Datacenter / Provider
     const providerRow = providerName
         ? `<span style="color: #f59e0b; font-size: 0.9em; font-weight: bold; display:block; margin-top: 4px;">🏢 Provider: ${providerName}</span>`
+        : "";
+
+    // Riga Sicurezza (solo sull'ultimo hop, la destinazione reale della connessione)
+    const securityRow = securityLabel
+        ? `<span style="color: ${SECURITY_LEVEL_COLORS[securityLevel] || '#94a3b8'}; font-size: 0.9em; font-weight: bold; display:block; margin-top: 4px;">🔐 ${securityLabel}</span>`
         : "";
 
     // --- BOX DESCRIZIONE CONTESTUALE ---
@@ -118,7 +138,8 @@ function getHopPopupHTML(sessionId, currentIndex, totalHops, currentIp, currentC
             <span style="color: #10b981; font-weight: bold;">Nodo: ${nodeType}</span><br>
             ${nameRow}
             ${subtitleRow}
-            ${providerRow}<br>
+            ${providerRow}
+            ${securityRow}<br>
             <span style="color: #94a3b8; font-size: 0.95em;">IP: ${currentIp}</span><br>
             ${portRow}
             ${contextBox}

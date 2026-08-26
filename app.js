@@ -22,6 +22,7 @@ const { resolveResourceDetails, recordDnsQuery } = require('./services/dnsServic
 const { getServiceName } = require('./services/portService');
 const { runNativeTraceroute } = require('./services/traceroute');
 const { enqueueProviderLookup, getCachedProvider } = require('./services/providerService');
+const { assessConnectionSecurity } = require('./services/securityService');
 const { upsertSession, updateSessionStatus, closeAllActiveSessions, updateSessionProvider } = require('./database/dbService');
 
 // ================================================================================
@@ -167,6 +168,11 @@ initSniffer(myIp, async (packet) => {
     const serviceName = getServiceName(remotePort, packet.service);
 
     // ================================================================================
+    // FASE 6-BIS: STIMA DEL LIVELLO DI SICUREZZA (HTTP in chiaro / versione TLS)
+    // ================================================================================
+    const security = assessConnectionSecurity(sessionId, remotePort, packet.payload);
+
+    // ================================================================================
     // FASE 7: GEOLOCALIZZAZIONE IP REMOTO
     // ================================================================================
     const geo = geoip.lookup(remoteIp);
@@ -196,6 +202,8 @@ initSniffer(myIp, async (packet) => {
         technicalSubtitle,
         provider,
         flow,
+        securityLevel: security ? security.level : null,
+        securityLabel: security ? security.label : null,
         totalKB,
         size: packetSizeBytes,
         isOutbound,
@@ -230,6 +238,8 @@ initSniffer(myIp, async (packet) => {
         lat,
         lon,
         flow: flow || null,
+        securityLevel: security ? security.level : null,
+        securityLabel: security ? security.label : null,
         formattedTime
     });
 

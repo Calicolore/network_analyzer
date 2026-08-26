@@ -13,6 +13,54 @@
 
 let sortThrottleTimeout = null;
 
+/**
+ * Stile (colore/icona) del badge di sicurezza per ciascun livello stimato da
+ * services/securityService.js.
+ */
+const SECURITY_BADGE_STYLES = {
+    insecure: { bg: '#7f1d1d', color: '#fecaca', icon: '🔓' },
+    weak: { bg: '#78350f', color: '#fde68a', icon: '🔐' },
+    adequate: { bg: '#1e3a5f', color: '#93c5fd', icon: '🔒' },
+    secure: { bg: '#14532d', color: '#86efac', icon: '🛡️' }
+};
+
+/**
+ * Costruisce l'HTML del badge di sicurezza connessione. Nessun badge visibile se il
+ * livello non è ancora noto (es. ClientHello non ancora catturato per questa sessione).
+ *
+ * @param {string|null} level - Livello di sicurezza stimato ('insecure'|'weak'|
+ *   'adequate'|'secure'), o null/non riconosciuto
+ * @param {string|null} label - Etichetta leggibile da mostrare nel badge
+ * @returns {string} Markup HTML del badge (span nascosto se il livello non è disponibile)
+ */
+function buildSecurityBadgeHtml(level, label) {
+    const style = SECURITY_BADGE_STYLES[level];
+    if (!style || !label) {
+        return `<span class="security-badge" style="display:none;"></span>`;
+    }
+    return `<span class="security-badge" style="background:${style.bg}; color:${style.color}; padding:2px 6px; border-radius:4px; font-size:0.7em; margin-left:6px;">${style.icon} ${label}</span>`;
+}
+
+/**
+ * Aggiorna testo, colore e visibilità del badge di sicurezza su una card esistente.
+ *
+ * @param {HTMLElement|null} badgeEl - Elemento badge da aggiornare (può essere assente)
+ * @param {string|null} level - Livello di sicurezza stimato, o null/non riconosciuto
+ * @param {string|null} label - Etichetta leggibile da mostrare nel badge
+ */
+function updateSecurityBadge(badgeEl, level, label) {
+    if (!badgeEl) return;
+    const style = SECURITY_BADGE_STYLES[level];
+    if (!style || !label) {
+        badgeEl.style.display = 'none';
+        return;
+    }
+    badgeEl.textContent = `${style.icon} ${label}`;
+    badgeEl.style.background = style.bg;
+    badgeEl.style.color = style.color;
+    badgeEl.style.display = '';
+}
+
 // ================================================================================
 // CREAZIONE ED AGGIORNAMENTO NODO CARD
 // ================================================================================
@@ -39,6 +87,7 @@ function createCardNode(data) {
     const flowBadgeStyle = 'background:#4338ca; color:#e0e7ff; padding:2px 6px; border-radius:4px; font-size:0.7em; margin-left:6px;';
     const providerBadge = `<span class="provider-badge" style="${providerBadgeStyle}${data.provider ? '' : ' display:none;'}">${data.provider || ''}</span>`;
     const flowBadge = `<span class="flow-badge" style="${flowBadgeStyle}${data.flow ? '' : ' display:none;'}">${data.flow || ''}</span>`;
+    const securityBadge = buildSecurityBadgeHtml(data.securityLevel, data.securityLabel);
 
     sessionDiv.innerHTML = `
         <div class="session-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
@@ -50,7 +99,7 @@ function createCardNode(data) {
                 </div>
                 <div class="subtitle-container"></div>
                 <div style="color: #64748b; font-size: 0.75em; font-family: monospace;">
-                    IP: ${data.remoteIp} ${countryBadge}${providerBadge}${flowBadge}
+                    IP: ${data.remoteIp} ${countryBadge}${providerBadge}${flowBadge}${securityBadge}
                 </div>
             </div>
             <div class="bandwidth-meter" style="text-align: right; color: #10b981; font-weight: bold; font-family: monospace; font-size: 0.9em; min-width: 110px;">
@@ -67,6 +116,7 @@ function createCardNode(data) {
     sessionDiv._containerEl = sessionDiv.querySelector('.packets-container');
     sessionDiv._providerBadgeEl = sessionDiv.querySelector('.provider-badge');
     sessionDiv._flowBadgeEl = sessionDiv.querySelector('.flow-badge');
+    sessionDiv._securityBadgeEl = sessionDiv.querySelector('.security-badge');
 
     return sessionDiv;
 }
@@ -144,6 +194,7 @@ function updateCardHeader(sessionDiv, data) {
 
     updateBadge(sessionDiv._providerBadgeEl, data.provider);
     updateBadge(sessionDiv._flowBadgeEl, data.flow);
+    updateSecurityBadge(sessionDiv._securityBadgeEl, data.securityLevel, data.securityLabel);
 }
 
 /**

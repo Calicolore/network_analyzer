@@ -199,7 +199,9 @@ function updateMapPacket(data) {
             cities: ['Sorgente', data.resourceName],
             subtitle: data.technicalSubtitle || '',
             provider: data.provider || null,
-            providers: [null, data.provider || null]
+            providers: [null, data.provider || null],
+            securityLevel: data.securityLevel || null,
+            securityLabel: data.securityLabel || null
         });
 
         const route = sessionRoutes.get(data.sessionId);
@@ -214,7 +216,7 @@ function updateMapPacket(data) {
         route.lines.push(line);
 
         const finalMarker = createCustomMarker([data.lat, data.lon], data.sessionColor, true, false, data.sessionId);
-        finalMarker.bindPopup(getHopPopupHTML(data.sessionId, 1, 2, data.remoteIp, data.resourceName, data.remotePort, data.technicalSubtitle, data.provider), { autoPan: false });
+        finalMarker.bindPopup(getHopPopupHTML(data.sessionId, 1, 2, data.remoteIp, data.resourceName, data.remotePort, data.technicalSubtitle, data.provider, data.securityLevel, data.securityLabel), { autoPan: false });
 
         route.hopMarkers.push(finalMarker);
         activeMarkers.set(data.sessionId, finalMarker);
@@ -246,8 +248,10 @@ function updateMapPacket(data) {
             route.subtitle = data.technicalSubtitle || '';
             route.provider = data.provider || null;
             if (route.providers) route.providers[route.providers.length - 1] = data.provider || null;
+            route.securityLevel = data.securityLevel || route.securityLevel;
+            route.securityLabel = data.securityLabel || route.securityLabel;
 
-            finalMarker.setPopupContent(getHopPopupHTML(data.sessionId, route.points.length - 1, route.points.length, data.remoteIp, data.resourceName, data.remotePort, data.technicalSubtitle, data.provider));
+            finalMarker.setPopupContent(getHopPopupHTML(data.sessionId, route.points.length - 1, route.points.length, data.remoteIp, data.resourceName, data.remotePort, data.technicalSubtitle, data.provider, route.securityLevel, route.securityLabel));
         }
     }
 }
@@ -296,8 +300,12 @@ function updateMapTraceroute(data) {
                 const marker = createCustomMarker(currentPoint, route.color, isLast, isFirst, sessionId);
                 const currentSubtitle = isLast ? route.subtitle : `Nodo di transito per ${route.cities[i]}`;
                 const currentProvider = route.providers ? route.providers[i] : null;
+                // Sicurezza mostrata solo sull'ultimo hop: è l'unico che rappresenta la
+                // destinazione reale della connessione, i nodi di transito sono solo router
+                const currentSecurityLevel = isLast ? route.securityLevel : null;
+                const currentSecurityLabel = isLast ? route.securityLabel : null;
 
-                marker.bindPopup(getHopPopupHTML(sessionId, i, route.points.length, route.ips[i], route.cities[i], extractedPort, currentSubtitle, currentProvider), { autoPan: false });
+                marker.bindPopup(getHopPopupHTML(sessionId, i, route.points.length, route.ips[i], route.cities[i], extractedPort, currentSubtitle, currentProvider, currentSecurityLevel, currentSecurityLabel), { autoPan: false });
 
                 if (isAnotherHighlighted) {
                     marker.setStyle({

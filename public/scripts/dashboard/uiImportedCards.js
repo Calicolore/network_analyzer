@@ -45,6 +45,7 @@ function createImportedCardNode(session) {
 
     const countryBadge = `<span style="background:#334155; padding:2px 6px; border-radius:4px; font-size:0.7em; margin-left:8px;">${session.country || 'N/A'}</span>`;
     const importedBadge = `<span style="background:#f59e0b; color:#1e293b; padding:2px 6px; border-radius:4px; font-size:0.7em; margin-left:6px; font-weight:bold;">📁 IMPORTATA</span>`;
+    const securityBadge = buildSecurityBadgeHtml(session.security_level, session.security_label);
 
     const totalBytes = Number(session.total_bytes) || 0;
     const totalKB = (totalBytes / 1024).toFixed(2);
@@ -60,7 +61,7 @@ function createImportedCardNode(session) {
                     ${session.resource_name || session.host_name || session.remote_ip}
                 </div>
                 <div style="color: #64748b; font-size: 0.75em; font-family: monospace;">
-                    IP: ${session.remote_ip} ${countryBadge} ${importedBadge}
+                    IP: ${session.remote_ip} ${countryBadge} ${importedBadge}${securityBadge}
                 </div>
             </div>
             <div class="bandwidth-meter" style="text-align: right; color: #10b981; font-weight: bold; font-family: monospace; font-size: 0.9em; min-width: 110px;">

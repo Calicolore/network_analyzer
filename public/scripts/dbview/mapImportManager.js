@@ -33,6 +33,18 @@ window.MapImportManager = (function () {
     let importLayerGroup = null;
 
     /**
+     * Colore per livello di sicurezza stimato (services/securityService.js), duplicato
+     * qui volutamente per mantenere il modulo indipendente (stessa logica di dashboard/
+     * mapPopup.js e dashboard/uiCardHelpers.js, ciascuno col proprio markup di badge).
+     */
+    const SECURITY_LEVEL_COLORS = {
+        insecure: '#f87171',
+        weak: '#fbbf24',
+        adequate: '#60a5fa',
+        secure: '#4ade80'
+    };
+
+    /**
      * Colore deterministico per una sessione importata. `session.sessionColor` non è
      * MAI presente nei dati reali (non è una colonna persistita su SQLite, né un campo
      * che l'oggetto sessione live in dbview/analytics.js include): usare solo quello con
@@ -217,9 +229,14 @@ window.MapImportManager = (function () {
 
         // Disegna i marker
         points.forEach((p, idx) => {
+            const securityHtml = (p.isFinal && session.security_label)
+                ? `<br><span style="color: ${SECURITY_LEVEL_COLORS[session.security_level] || '#94a3b8'}; font-size: 0.85em; font-weight: bold;">🔐 ${session.security_label}</span>`
+                : '';
+
             const extra = p.isFinal
                 ? `<br><span style="color: #10b981; font-size: 0.85em;">Servizio: ${session.service || 'N/A'}</span>
                    <br><span style="color: #94a3b8; font-size: 0.85em;">Byte totali: ${session.total_bytes || 0}</span>
+                   ${securityHtml}
                    ${isIsolated ? '<br><span style="color: #f59e0b; font-size: 0.8em;">⚠ Nessun dato traceroute disponibile</span>' : ''}`
                 : `<br><span style="color: #64748b; font-size: 0.8em;">Hop #${idx + 1} (transito)</span>`;
 
