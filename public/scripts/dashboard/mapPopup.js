@@ -93,10 +93,12 @@ function getHopPopupHTML(sessionId, currentIndex, totalHops, currentIp, currentC
     if (isFirst) {
         nameRow = `<span style="color: #cbd5e1;">Nome: ${nameDisplay}</span>`;
     } else {
-        // Un IP privato mostrato come "nome" (identificazione fallita per un hop sulla
-        // propria LAN) non va reso come link cliccabile "Apri sito web": non esiste un
-        // sito pubblico raggiungibile su quell'indirizzo. Copre tutte le classi RFC1918,
-        // non solo 192.168.x.x.
+        /**
+         * Un IP privato mostrato come "nome" (identificazione fallita per un hop sulla
+         * propria LAN) non va reso come link cliccabile "Apri sito web": non esiste un
+         * sito pubblico raggiungibile su quell'indirizzo. Copre tutte le classi RFC1918,
+         * non solo 192.168.x.x.
+         */
         const isPrivateHostIp = /^(192\.168\.|10\.|172\.(1[6-9]|2\d|3[0-1])\.|127\.)/.test(nameDisplay);
         const isDomain = nameDisplay.includes('.') && nameDisplay !== currentIp && !isPrivateHostIp;
 

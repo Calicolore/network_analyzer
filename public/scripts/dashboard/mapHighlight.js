@@ -51,11 +51,13 @@ window.highlightSession = function(sessionId) {
         });
     });
 
+    /**
+     * NOTA: 'dimmed-card' è riservata a QUESTA feature (evidenziazione), distinta da
+     * 'idle-card' (sessione inattiva per timeout, vedi uiCardHelpers.js) — non vanno
+     * mai unificate, altrimenti evidenziare/deselezionare una rotta cancellerebbe lo
+     * stato "inattiva" di altre card non correlate.
+     */
     // 2. Scurimento Card Dashboard
-    // NOTA: 'dimmed-card' è riservata a QUESTA feature (evidenziazione), distinta da
-    // 'idle-card' (sessione inattiva per timeout, vedi uiCardHelpers.js) — non vanno
-    // mai unificate, altrimenti evidenziare/deselezionare una rotta cancellerebbe lo
-    // stato "inattiva" di altre card non correlate.
     document.querySelectorAll('.session-card').forEach(card => {
         if (card.id === sessionId) {
             card.classList.add('highlighted-card');

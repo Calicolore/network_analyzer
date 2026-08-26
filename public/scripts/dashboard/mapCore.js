@@ -41,14 +41,18 @@ const southWest = L.latLng(-89.98, -180);
 const northEast = L.latLng(89.98, 180);
 map.setMaxBounds(L.latLngBounds(southWest, northEast));
 
-// Espone l'istanza Leaflet ad altri moduli (es. analytics.js per invalidateSize, mapImportManager.js
-// per disegnare le rotte ricostruite da un DB importato)
+/**
+ * Espone l'istanza Leaflet ad altri moduli (es. analytics.js per invalidateSize, mapImportManager.js
+ * per disegnare le rotte ricostruite da un DB importato)
+ */
 window.map = map;
 
-// Layer group dedicato a TUTTI gli elementi del traffico live (linee, hitbox, marker).
-// Permette di "mettere in pausa" la mappa live (map.removeLayer(liveLayerGroup)) senza
-// distruggere nulla: i marker/linee restano intatti in memoria con popup, colori e coordinate,
-// pronti per essere riattaccati istantaneamente (map.addLayer(liveLayerGroup)) al ritorno da un DB importato.
+/**
+ * Layer group dedicato a TUTTI gli elementi del traffico live (linee, hitbox, marker).
+ * Permette di "mettere in pausa" la mappa live (map.removeLayer(liveLayerGroup)) senza
+ * distruggere nulla: i marker/linee restano intatti in memoria con popup, colori e coordinate,
+ * pronti per essere riattaccati istantaneamente (map.addLayer(liveLayerGroup)) al ritorno da un DB importato.
+ */
 const liveLayerGroup = L.layerGroup().addTo(map);
 
 // ====================================================================================
@@ -121,10 +125,12 @@ function setHomeLocation(coords) {
 // ====================================================================================
 // GEOLOCALIZZAZIONE NATIVA BROWSER
 // ====================================================================================
-// Nota: l'evento socket 'home_location' (posizione stimata lato server) è gestito
-// direttamente in dashboard.js, che chiama questa stessa setHomeLocation() — non va
-// gestito qui perché al momento in cui questo script viene eseguito `socket` non è
-// ancora stato dichiarato (dashboard.js carica molto più avanti nell'ordine script).
+/**
+ * Nota: l'evento socket 'home_location' (posizione stimata lato server) è gestito
+ * direttamente in dashboard.js, che chiama questa stessa setHomeLocation() — non va
+ * gestito qui perché al momento in cui questo script viene eseguito `socket` non è
+ * ancora stato dichiarato (dashboard.js carica molto più avanti nell'ordine script).
+ */
 if ("geolocation" in navigator) {
     navigator.geolocation.getCurrentPosition(
         (position) => {

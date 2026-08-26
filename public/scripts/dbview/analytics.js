@@ -121,8 +121,10 @@ document.addEventListener('DOMContentLoaded', () => {
         scheduleRender();
     });
 
-    // Aggancia gli hop di traceroute scoperti in tempo reale alle sessioni corrispondenti,
-    // così l'export JSON "Sessione Corrente" porta con sé l'intero percorso, non solo la destinazione.
+    /**
+     * Aggancia gli hop di traceroute scoperti in tempo reale alle sessioni corrispondenti,
+     * così l'export JSON "Sessione Corrente" porta con sé l'intero percorso, non solo la destinazione.
+     */
     socket.on('traceroute_hop', (hopData) => {
         if (exp && exp.isImportedMode) return;
         if (!hopData || !hopData.targetIp) return;
@@ -172,8 +174,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Unico listener sul cambio parametro del grafico a torta (analyticsChart.js non
-    // ne registra più uno proprio, per evitare il doppio render — vedi analyticsChart.js)
+    /**
+     * Unico listener sul cambio parametro del grafico a torta (analyticsChart.js non
+     * ne registra più uno proprio, per evitare il doppio render — vedi analyticsChart.js)
+     */
     document.getElementById('paramSelect')?.addEventListener('change', () => {
         ui.applyFiltersAndRender(true);
     });

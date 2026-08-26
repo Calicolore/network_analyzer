@@ -24,8 +24,10 @@ const { exec } = require('child_process');
 const geoip = require('geoip-lite');
 const { upsertHop } = require('../database/dbService');
 
-// Registro globale per evitare l'esecuzione di traceroute duplicati ed essere sicuri
-// di lanciare una sola analisi per ciascun IP di destinazione
+/**
+ * Registro globale per evitare l'esecuzione di traceroute duplicati ed essere sicuri
+ * di lanciare una sola analisi per ciascun IP di destinazione
+ */
 const activeTraceroutes = new Set();
 
 /**
@@ -61,16 +63,20 @@ function runNativeTraceroute(targetIp, io) {
             if (match) {
                 const hopIp = match[0];
                 
-                // Ignoriamo la destinazione finale (già presente nelle card) e la rete locale.
-                // (Il prefisso "192.168." copre già da solo l'intera sottorete locale, incluso
-                // il router "192.168.1.1": un secondo controllo su quel prefisso era ridondante
-                // e in più avrebbe escluso per errore anche IP validi come 192.168.1.10-19/100-199.)
+                /**
+                 * Ignoriamo la destinazione finale (già presente nelle card) e la rete locale.
+                 * Il prefisso "192.168." copre già da solo l'intera sottorete locale, incluso
+                 * il router "192.168.1.1": un secondo controllo su quel prefisso era ridondante
+                 * e in più avrebbe escluso per errore anche IP validi come 192.168.1.10-19/100-199.
+                 */
                 if (hopIp === targetIp || hopIp.startsWith('192.168.')) continue;
-                
+
+                /**
+                 * Qui è disponibile SOLO l'indirizzo IP numerico dell'hop (nessun hostname:
+                 * il comando tracert/traceroute non esegue una reverse DNS), quindi l'unica
+                 * euristica applicabile è un confronto sul prefisso IP di blocchi noti.
+                 */
                 // PASSO 4: Geolocalizzazione del nodo intermedio e identificazione automatica del Provider
-                // Qui è disponibile SOLO l'indirizzo IP numerico dell'hop (nessun hostname:
-                // il comando tracert/traceroute non esegue una reverse DNS), quindi l'unica
-                // euristica applicabile è un confronto sul prefisso IP di blocchi noti.
                 let hopProvider = null;
                 if (hopIp.startsWith('20.')) hopProvider = 'Microsoft Azure';
 

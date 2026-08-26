@@ -185,9 +185,11 @@ function initSocketListener() {
 
     setInterval(() => {
         if (isImportedModeActive()) {
-            // Nessun traffico live in arrivo: grafico temporale piatto a zero,
-            // statistiche Download/Upload a 0.0 KB/s. L'accumulo live resta congelato
-            // (non azzerato) in liveConnectionTrafficMap, pronto per il ripristino.
+            /**
+             * Nessun traffico live in arrivo: grafico temporale piatto a zero,
+             * statistiche Download/Upload a 0.0 KB/s. L'accumulo live resta congelato
+             * (non azzerato) in liveConnectionTrafficMap, pronto per il ripristino.
+             */
             updateBandwidthData(0, 0, true);
             currentDownloadBytes = 0;
             currentUploadBytes = 0;

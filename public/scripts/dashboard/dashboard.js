@@ -10,8 +10,10 @@
  */
 
 const socket = io();
-// Esposta su window così bandwidthFeed.js (che carica prima ma si connette solo su
-// DOMContentLoaded) riusa QUESTA connessione invece di aprirne una seconda indipendente.
+/**
+ * Esposta su window così bandwidthFeed.js (che carica prima ma si connette solo su
+ * DOMContentLoaded) riusa QUESTA connessione invece di aprirne una seconda indipendente.
+ */
 window.socket = socket;
 
 // Mappa in memoria per tracciare i dati aggiornati di ciascuna sessione

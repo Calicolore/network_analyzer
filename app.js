@@ -111,9 +111,11 @@ initSniffer(myIp, async (packet) => {
     const remotePort = isOutbound ? packet.dstPort : packet.srcPort;
     const sessionId = `${remoteIp}:${remotePort}`;
 
-    // Esclude solo il traffico verso/da questo stesso server Express (dashboard+websocket):
-    // il controllo va fatto sulla porta LOCALE, non su remotePort — un servizio remoto che
-    // usasse per coincidenza la stessa porta del webserver locale non va escluso per errore.
+    /**
+     * Esclude solo il traffico verso/da questo stesso server Express (dashboard+websocket):
+     * il controllo va fatto sulla porta LOCALE, non su remotePort — un servizio remoto che
+     * usasse per coincidenza la stessa porta del webserver locale non va escluso per errore.
+     */
     if (localPort === webPort) return;
 
     // ================================================================================
@@ -175,8 +177,10 @@ initSniffer(myIp, async (packet) => {
     // FASE 8: TRADUZIONE FLAG TCP E DIMENSIONE PACCHETTO
     // ================================================================================
     const readableFlags = translateFlags(packet.flags);
-    // packet.size è sempre popolato per pacchetti TCP/UDP da network/sniffer.js
-    // (i pacchetti DNS, unico caso privo di `size`, sono già gestiti ed usciti in FASE 1)
+    /**
+     * packet.size è sempre popolato per pacchetti TCP/UDP da network/sniffer.js
+     * (i pacchetti DNS, unico caso privo di `size`, sono già gestiti ed usciti in FASE 1)
+     */
     const packetSizeBytes = packet.size || 0;
 
     // ================================================================================

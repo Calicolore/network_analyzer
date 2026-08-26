@@ -311,22 +311,6 @@
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
 }
 
-.chart-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    color: #38bdf8;
-    font-size: 0.95rem;
-    font-weight: 600;
-    margin-bottom: 8px;
-}
-
-.chart-header .stats-text {
-    color: #cbd5e1;
-    font-size: 0.85rem;
-    font-family: 'Cascadia Code', 'Courier New', monospace;
-}
-
 .chart-wrapper {
     position: relative;
     width: 100%;

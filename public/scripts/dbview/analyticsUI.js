@@ -397,10 +397,12 @@ window.analyticsUI = {
         this.updatePaginationUI();
         this.updateGlobalKpiUI(fullFilteredDataset);
 
-        // 8. PROTEZIONE PAGINAZIONE REAL-TIME PER LA TABELLA:
-        // Se è un aggiornamento automatico da streaming real-time e l'utente NON è su Pagina 1
-        // (es. sta analizzando Pagina 2 o successive), aggiorniamo i dati in background ma
-        // NON ridisegniamo le righe della tabella per evitare slittamenti e glitch visivi.
+        /**
+         * Se è un aggiornamento automatico da streaming real-time e l'utente NON è su Pagina 1
+         * (es. sta analizzando Pagina 2 o successive), aggiorniamo i dati in background ma
+         * NON ridisegniamo le righe della tabella per evitare slittamenti e glitch visivi.
+         */
+        // 8. Protezione paginazione real-time per la tabella
         if (forceChartUpdate || state.currentPage === 1) {
             this.renderTable(pageTableData);
         }

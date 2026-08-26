@@ -46,9 +46,11 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 db.exec(initQuery);
 
-// CREAZIONE TABELLA HOPS (nodi intermedi di traceroute, uno-a-molti per IP di destinazione)
-// Chiave logica su target_ip (non su session_id): il traceroute è deduplicato per IP,
-// quindi sessioni diverse verso lo stesso IP condividono lo stesso percorso di hop.
+/**
+ * Tabella hops (nodi intermedi di traceroute, uno-a-molti per IP di destinazione).
+ * Chiave logica su target_ip (non su session_id): il traceroute è deduplicato per IP,
+ * quindi sessioni diverse verso lo stesso IP condividono lo stesso percorso di hop.
+ */
 const initHopsQuery = `
 CREATE TABLE IF NOT EXISTS hops (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -90,8 +92,10 @@ safeAddColumn('sessions', 'lat REAL');
 safeAddColumn('sessions', 'lon REAL');
 safeAddColumn('sessions', 'flow TEXT');
 
-// CREAZIONE TABELLA CACHE PROVIDER/ASN (persiste i risultati di ip-api.com tra i riavvii,
-// per evitare di richiamare l'API per IP già arricchiti in precedenza)
+/**
+ * Tabella cache provider/ASN: persiste i risultati di ip-api.com tra i riavvii,
+ * per evitare di richiamare l'API per IP già arricchiti in precedenza.
+ */
 const initProviderCacheQuery = `
 CREATE TABLE IF NOT EXISTS ip_provider_cache (
     ip TEXT PRIMARY KEY,
@@ -105,8 +109,12 @@ CREATE TABLE IF NOT EXISTS ip_provider_cache (
 
 db.exec(initProviderCacheQuery);
 
-// === RIPRISTINO STATO ALL'AVVIO ===
-// Riutilizzato anche in closeAllActiveSessions() più sotto, alla chiusura pulita del processo.
+/**
+ * ================================================================================
+ * RIPRISTINO STATO ALL'AVVIO
+ * ================================================================================
+ * Riutilizzato anche in closeAllActiveSessions() più sotto, alla chiusura pulita del processo.
+ */
 const closeActiveOrIdleStmt = db.prepare("UPDATE sessions SET status = 'closed' WHERE status IN ('active', 'idle')");
 const result = closeActiveOrIdleStmt.run();
 if (result.changes > 0) {
@@ -174,8 +182,6 @@ const upsertHopStmt = db.prepare(`
         city = excluded.city,
         provider = excluded.provider;
 `);
-
-const getHopsByTargetIpStmt = db.prepare('SELECT hop_number, ip, lat, lon, country, city, provider FROM hops WHERE target_ip = ? ORDER BY hop_number ASC');
 
 // Prepared statement per la cache persistita dei provider/ASN risolti via ip-api.com
 const upsertProviderCacheStmt = db.prepare(`
@@ -301,21 +307,6 @@ function upsertHop(hopData) {
 }
 
 /**
- * Recupera, in ordine, tutti gli hop di traceroute registrati per un IP di destinazione.
- *
- * @param {string} targetIp - IP di destinazione di cui recuperare il percorso
- * @returns {object[]} Righe hop ordinate per hop_number (array vuoto in caso di errore)
- */
-function getHopsByTargetIp(targetIp) {
-    try {
-        return getHopsByTargetIpStmt.all(targetIp);
-    } catch (err) {
-        console.error('[DATABASE] Errore durante il recupero degli hop:', err.message);
-        return [];
-    }
-}
-
-/**
  * Salva/aggiorna in modo permanente il risultato di un lookup provider/ASN (ip-api.com).
  * Scrittura diretta (non bufferizzata): un IP viene risolto una sola volta e mai più.
  *
@@ -360,13 +351,11 @@ function updateSessionProvider(remoteIp, providerLabel) {
 }
 
 module.exports = {
-    db,
     upsertSession,
     updateSessionStatus,
     closeAllActiveSessions,
     flushBuffer,
     upsertHop,
-    getHopsByTargetIp,
     upsertProviderCache,
     getAllProviderCache,
     updateSessionProvider

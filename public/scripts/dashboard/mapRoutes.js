@@ -121,8 +121,10 @@ function centerAndOpenPopup(marker, zoomLevel) {
             const popupHeight = popupEl ? popupEl.offsetHeight : 140;
 
             if (popupHeight > 20) {
-                // panBy con Y negativo sposta il CONTENUTO verso l'alto, cioè il punto
-                // scende nel riquadro, lasciando sopra lo spazio occupato dal popup.
+                /**
+                 * panBy con Y negativo sposta il CONTENUTO verso l'alto, cioè il punto
+                 * scende nel riquadro, lasciando sopra lo spazio occupato dal popup.
+                 */
                 map.panBy([0, -(popupHeight / 2)], { animate: true });
             }
         }, 50);

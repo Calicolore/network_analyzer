@@ -119,10 +119,12 @@ function renderAnalyticsChart(data = []) {
     const labels = Object.keys(counts);
     const values = Object.values(counts);
 
-    // "length - 1" esclude deliberatamente l'ultimo colore della tavolozza (#64748b) dal
-    // ciclo delle fette normali: è lo stesso grigio hardcoded usato qui sopra per "Altro",
-    // riservato solo a quella fetta così non viene mai assegnato per coincidenza a una
-    // categoria reale.
+    /**
+     * "length - 1" esclude deliberatamente l'ultimo colore della tavolozza (#64748b) dal
+     * ciclo delle fette normali: è lo stesso grigio hardcoded usato qui sopra per "Altro",
+     * riservato solo a quella fetta così non viene mai assegnato per coincidenza a una
+     * categoria reale.
+     */
     const bgColors = labels.map((label, i) => {
         if (label === 'Altro') return '#64748b';
         return CHART_COLORS[i % (CHART_COLORS.length - 1)];

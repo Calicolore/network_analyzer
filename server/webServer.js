@@ -129,8 +129,10 @@ function startServer(port) {
                     return respond(rows);
                 }
 
-                // Query 3: Recupero degli hop di traceroute per gli IP presenti nella pagina corrente.
-                // Necessario per ricostruire l'intero percorso sulla mappa quando il DB viene esportato/importato.
+                /**
+                 * Query 3: Recupero degli hop di traceroute per gli IP presenti nella pagina corrente.
+                 * Necessario per ricostruire l'intero percorso sulla mappa quando il DB viene esportato/importato.
+                 */
                 const distinctIps = [...new Set(rows.map(r => r.remote_ip))];
                 const placeholders = distinctIps.map(() => '?').join(',');
                 const hopsQuery = `SELECT * FROM hops WHERE target_ip IN (${placeholders}) ORDER BY target_ip, hop_number ASC`;
@@ -201,8 +203,10 @@ function startServer(port) {
             console.log("[GEOLOC] Impossibile recuperare l'IP pubblico locale da server.");
         }
 
-        // Coordinate predefinite di estremo fallback (anch'esse cachate: se la rete non
-        // è raggiungibile ora, molto probabilmente non lo sarà nemmeno al prossimo tentativo)
+        /**
+         * Coordinate predefinite di estremo fallback (anch'esse cachate: se la rete non
+         * è raggiungibile ora, molto probabilmente non lo sarà nemmeno al prossimo tentativo)
+         */
         cachedHomeCoords = [43.7257, 12.6357];
         return cachedHomeCoords;
     }

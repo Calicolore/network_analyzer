@@ -418,11 +418,13 @@ async function resolveResourceDetails(remoteIp, packetPayload = null) {
         resolved = true;
     }
 
-    // 2. SNI del ClientHello TLS, o header Host: di una richiesta HTTP in chiaro.
-    // Se il payload non produce un dominio valido (frammentazione TLS, pacchetto senza
-    // SNI, ecc.) NON ci si ferma qui: si prosegue con i passi successivi invece di
-    // arrendersi subito su "Risorsa Web", perché reverse DNS o cache di sistema
-    // potrebbero comunque avere un nome buono.
+    /**
+     * Se il payload non produce un dominio valido (frammentazione TLS, pacchetto senza
+     * SNI, ecc.) NON ci si ferma qui: si prosegue con i passi successivi invece di
+     * arrendersi subito su "Risorsa Web", perché reverse DNS o cache di sistema
+     * potrebbero comunque avere un nome buono.
+     */
+    // 2. SNI del ClientHello TLS, o header Host: di una richiesta HTTP in chiaro
     if (!resolved && packetPayload) {
         const extractedDomain = extractSNIFromTLS(packetPayload) || extractHostFromHTTP(packetPayload);
         if (extractedDomain) {
